@@ -189,10 +189,12 @@ docs/             HACKATHON_PLAN.md (start here)                    (done)
 - [x] **MongoDB MCP integration (secondary action tool)**
 - [x] Agent Builder YAML spec + deploy script
 - [x] Tool HTTP endpoints (`/api/v1/tools/*`) for Agent Builder to call
+- [x] `/api/v1/farms` onboarding CRUD endpoint
+- [x] Demo seed (1 farm + 3 historical recommendations on first boot, dev profile)
+- [x] Secret-redacting Logback converter (defence-in-depth for log lines)
 - [x] Unit + MockMvc tests
 - [x] Swagger / OpenAPI UI
 - [x] Dockerfile + docker-compose (app + mongo + mongodb-mcp)
-- [ ] `/api/v1/farms` onboarding endpoint
 - [ ] Cloud Run deployment (blocked on GCP billing)
 - [ ] Next.js frontend (onboarding + dashboard)
 - [ ] 3-min demo video
