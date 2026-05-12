@@ -36,7 +36,9 @@ springdoc:
 agriguardian:
   gemini:
     api-key: ${GEMINI_API_KEY:}
-    model: ${GEMINI_MODEL:gemini-2.0-flash}
+    # gemini-3-pro = hackathon-required Gemini 3 reasoning model.
+    # gemini-3-flash is also available for lower latency / cost.
+    model: ${GEMINI_MODEL:gemini-3-pro}
     base-url: https://generativelanguage.googleapis.com/v1beta
     stub-mode: ${GEMINI_STUB_MODE:auto}   # auto | always | never
     timeout-seconds: 30
@@ -47,6 +49,16 @@ agriguardian:
     otlp-endpoint: ${ARIZE_OTLP_ENDPOINT:https://otlp.arize.com/v1}
     mcp-url: ${ARIZE_MCP_URL:}
     project-name: agriguardian-ai
+  mcp:
+    # Partner-track integration: MongoDB MCP server
+    # (run as a sidecar — see docker-compose.yml). The agent calls this
+    # over JSON-RPC 2.0 / HTTP+SSE to query and mutate the farm database
+    # under farmer supervision. This is what qualifies us for the
+    # MongoDB partner bucket in the hackathon.
+    mongodb:
+      enabled: ${MCP_MONGODB_ENABLED:false}
+      url: ${MCP_MONGODB_URL:http://localhost:3000/mcp}
+      timeout-seconds: 15
   weather:
     base-url: https://api.open-meteo.com/v1
   market:
@@ -73,6 +85,14 @@ resilience4j:
         waitDurationInOpenState: 30s
         permittedNumberOfCallsInHalfOpenState: 3
         automaticTransitionFromOpenToHalfOpenEnabled: true
+      mongoMcp:
+        slidingWindowType: COUNT_BASED
+        slidingWindowSize: 10
+        minimumNumberOfCalls: 3
+        failureRateThreshold: 60
+        waitDurationInOpenState: 20s
+        permittedNumberOfCallsInHalfOpenState: 2
+        automaticTransitionFromOpenToHalfOpenEnabled: true
   retry:
     instances:
       openMeteo:
@@ -83,6 +103,11 @@ resilience4j:
         retryExceptions:
           - org.springframework.web.client.RestClientException
           - java.io.IOException
+      mongoMcp:
+        maxAttempts: 2
+        waitDuration: 300ms
+        retryExceptions:
+          - com.Hackathon.AgriGuardian.AI.mcp.McpClient$McpException
 
 ---
 spring:
