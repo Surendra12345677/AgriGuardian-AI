@@ -1,0 +1,20 @@
+# Files NOT copied into the Docker build context
+.git
+.github
+.gradle
+.idea
+build
+out
+*.iml
+*.log
+.env
+.env.*
+!.env.example
+docs
+README.md
+HELP.md
+LICENSE
+CONTRIBUTING.md
+CODE_OF_CONDUCT.md
+SECURITY.md
+
