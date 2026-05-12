@@ -67,10 +67,6 @@ services:
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3-pro}
       GEMINI_STUB_MODE: ${GEMINI_STUB_MODE:-auto}
-      ARIZE_ENABLED: ${ARIZE_ENABLED:-false}
-      ARIZE_API_KEY: ${ARIZE_API_KEY:-}
-      ARIZE_SPACE_ID: ${ARIZE_SPACE_ID:-}
-      ARIZE_OTLP_ENDPOINT: ${ARIZE_OTLP_ENDPOINT:-https://otlp.arize.com/v1}
       # Partner-track MCP wiring
       MCP_MONGODB_ENABLED: "true"
       MCP_MONGODB_URL: "http://mongodb-mcp:3000/mcp"

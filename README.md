@@ -80,8 +80,9 @@ details.
 | Database | MongoDB |
 | LLM | Google **Gemini 3** (`gemini-3-pro`) |
 | Agent platform | Google Cloud **Agent Builder** (spec: [`agent-builder/agriguardian-agent.yaml`](./agent-builder/agriguardian-agent.yaml)) |
-| **Partner integration** | **MongoDB MCP server** (Model Context Protocol) — qualifies for the MongoDB partner bucket |
-| Observability | **Arize AX** (OpenTelemetry → OTLP) |
+| **Partner integration** | **Arize MCP** (Model Context Protocol) — qualifies for the Arize partner bucket |
+| Observability | **Arize AX** (OpenTelemetry → OTLP) — the agent's own traces flow into Arize |
+| Secondary action tool | **MongoDB MCP** — agent persists farm plans under user approval |
 | Resilience | Resilience4j (Circuit Breaker + Retry) + Caffeine cache |
 | External APIs | Open-Meteo (weather), mock Market Price API |
 
@@ -164,10 +165,11 @@ docs/             HACKATHON_PLAN.md (start here)                    (done)
 
 ## 🏆 Hackathon
 
-- **Event:** Building Agents for Real-World Challenges (Google Cloud + Partners)
-- **Partner track:** 🍃 **MongoDB** — agent uses the official MongoDB MCP server to read & mutate farm data
+- **Event:** Google Cloud Rapid Agent Hackathon — *Building Agents for Real-World Challenges*
+- **Partner track:** 🟣 **Arize** — agent uses Arize MCP to consult past evaluations before answering and log feedback after
 - **Brain:** Gemini 3 (`gemini-3-pro`) via Google Cloud Agent Builder
 - **Agent spec:** [`agent-builder/agriguardian-agent.yaml`](./agent-builder/agriguardian-agent.yaml)
+- **Self-aware loop:** every run is exported as a trace to Arize AX (OTLP); the agent then queries those traces via Arize MCP on the next run — closing the observe→learn loop
 - **Criteria mapping:** see [`docs/HACKATHON_PLAN.md`](./docs/HACKATHON_PLAN.md) §2
 
 ## 🗺️ Roadmap
@@ -183,8 +185,10 @@ docs/             HACKATHON_PLAN.md (start here)                    (done)
 - [x] Arize OTel exporter + correlation-id MDC filter
 - [x] Resilience4j circuit-breaker + retry + Caffeine cache
 - [x] Real Open-Meteo weather + seasonal market price tools
-- [x] **MongoDB MCP integration (partner-track qualifier)**
+- [x] **Arize MCP integration (partner-track qualifier)**
+- [x] **MongoDB MCP integration (secondary action tool)**
 - [x] Agent Builder YAML spec + deploy script
+- [x] Tool HTTP endpoints (`/api/v1/tools/*`) for Agent Builder to call
 - [x] Unit + MockMvc tests
 - [x] Swagger / OpenAPI UI
 - [x] Dockerfile + docker-compose (app + mongo + mongodb-mcp)
