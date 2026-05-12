@@ -1,3 +1,41 @@
-/gradlew text eol=lf
-*.bat text eol=crlf
-*.jar binary
+# Default: let Git auto-detect text files and normalize line endings to LF on commit.
+* text=auto eol=lf
+
+# Explicit text files
+*.java        text
+*.kt          text
+*.gradle      text
+*.kts         text
+*.xml         text
+*.yml         text
+*.yaml        text
+*.json        text
+*.md          text
+*.properties  text
+*.sql         text
+*.ts          text
+*.tsx         text
+*.js          text
+*.jsx         text
+
+# Shell scripts must stay LF (break in Linux containers / CI otherwise)
+*.sh          text eol=lf
+gradlew       text eol=lf
+
+# Windows-only files
+*.bat         text eol=crlf
+*.cmd         text eol=crlf
+
+# Binary
+*.jar         binary
+*.png         binary
+*.jpg         binary
+*.jpeg        binary
+*.gif         binary
+*.ico         binary
+*.pdf         binary
+*.zip         binary
+
+# Mark generated files so GitHub diffs collapse them
+build/**      linguist-generated=true
+**/*.lock     linguist-generated=true
