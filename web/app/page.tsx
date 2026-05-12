@@ -41,13 +41,27 @@ export default function HomePage() {
         </p>
       </section>
 
-      {bootError && (
-        <div className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm
-                        text-red-700">
-          Could not reach the backend ({bootError}). Make sure the Spring Boot app is
-          running on <code>localhost:8080</code> (or set <code>BACKEND_URL</code>).
-        </div>
-      )}
+      {bootError && (() => {
+        const msg = bootError.toLowerCase();
+        const isDbDown =
+          msg.includes("500") || msg.includes("mongo") ||
+          msg.includes("timeout") || msg.includes("connection refused");
+        return isDbDown ? (
+          <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm
+                          text-amber-800">
+            <strong>MongoDB is not connected yet.</strong> The agent and tool endpoints
+            still work — only farm persistence is disabled. Start MongoDB with{" "}
+            <code>docker compose up -d mongo</code> or set{" "}
+            <code>SPRING_DATA_MONGODB_URI</code> to a MongoDB Atlas cluster, then refresh.
+          </div>
+        ) : (
+          <div className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm
+                          text-red-700">
+            Could not reach the backend ({bootError}). Make sure the Spring Boot app is
+            running on <code>localhost:8080</code> (or set <code>BACKEND_URL</code>).
+          </div>
+        );
+      })()}
 
       <div className="grid md:grid-cols-3 gap-6">
         <div className="md:col-span-1 space-y-6">
