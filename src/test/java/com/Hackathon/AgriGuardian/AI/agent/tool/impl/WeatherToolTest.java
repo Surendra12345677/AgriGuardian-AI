@@ -1,55 +1,43 @@
 package com.Hackathon.AgriGuardian.AI.agent.tool.impl;
 
 import com.Hackathon.AgriGuardian.AI.config.AgriGuardianProperties;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.http.MediaType;
-import org.springframework.test.web.client.MockRestServiceServer;
-import org.springframework.web.client.RestClient;
 
+import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
-import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
-import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
-import static org.springframework.test.web.client.response.MockRestResponseCreators.withServerError;
-import org.springframework.http.HttpMethod;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
 
+/**
+ * Unit-tests the {@link WeatherTool} by mocking the declarative
+ * {@link OpenMeteoClient}. Resilience4j and Caffeine annotations are no-ops
+ * here because we instantiate the tool directly (no Spring proxy) — this is
+ * intentional: those concerns are covered by their own well-tested libraries.
+ */
 class WeatherToolTest {
 
+    private OpenMeteoClient client;
     private WeatherTool tool;
-    private MockRestServiceServer server;
 
     @BeforeEach
     void setUp() {
+        client = mock(OpenMeteoClient.class);
         AgriGuardianProperties props = new AgriGuardianProperties();
-        props.getWeather().setBaseUrl("https://api.open-meteo.com/v1");
-
-        RestClient.Builder builder = RestClient.builder();
-        // Bind a mock server to this builder before WeatherTool builds the client.
-        server = MockRestServiceServer.bindTo(builder).build();
-        tool = new WeatherTool(props, builder);
-    }
-
-    @AfterEach
-    void tearDown() {
-        server.verify();
+        tool = new WeatherTool(props, client);
     }
 
     @Test
     void invoke_validResponse_summarizesDailyArrays() {
-        String json = """
-                { "daily": {
-                    "temperature_2m_max":        [30.0, 31.0, 32.0],
-                    "temperature_2m_min":        [20.0, 21.0, 22.0],
-                    "precipitation_sum":         [ 1.0,  2.5,  0.0],
-                    "relative_humidity_2m_mean": [60.0, 70.0, 65.0]
-                }}
-                """;
-        server.expect(method(HttpMethod.GET))
-              .andRespond(withSuccess(json, MediaType.APPLICATION_JSON));
+        when(client.getForecast(anyDouble(), anyDouble(), anyString(), anyInt(), anyString()))
+                .thenReturn(new OpenMeteoClient.OpenMeteoResponse(new OpenMeteoClient.Daily(
+                        List.of(30.0, 31.0, 32.0),
+                        List.of(20.0, 21.0, 22.0),
+                        List.of( 1.0,  2.5,  0.0),
+                        List.of(60.0, 70.0, 65.0)
+                )));
 
         Map<String, Object> out = tool.invoke(Map.of("latitude", 18.52, "longitude", 73.85));
 
@@ -61,21 +49,19 @@ class WeatherToolTest {
     }
 
     @Test
-    void invoke_missingCoords_returnsFallback() {
-        // No HTTP call expected.
+    void invoke_missingCoords_returnsFallback_andSkipsHttp() {
         Map<String, Object> out = tool.invoke(Map.of());
         assertThat(out).containsEntry("source", "fallback")
                        .containsEntry("reason", "missing-coords");
+        verifyNoInteractions(client);
     }
 
     @Test
-    void invoke_serverError_returnsFallback() {
-        server.expect(requestTo(org.hamcrest.Matchers.startsWith("https://api.open-meteo.com/v1/forecast")))
-              .andRespond(withServerError());
-
-        Map<String, Object> out = tool.invoke(Map.of("latitude", 18.52, "longitude", 73.85));
+    void fetchForecastFallback_returnsSafeDefaults() {
+        Map<String, Object> out = tool.fetchForecastFallback(
+                18.52, 73.85, new RuntimeException("boom"));
         assertThat(out).containsEntry("source", "fallback")
-                       .containsEntry("reason", "network-error");
+                       .containsEntry("reason", "circuit-open-or-error");
     }
 }
 

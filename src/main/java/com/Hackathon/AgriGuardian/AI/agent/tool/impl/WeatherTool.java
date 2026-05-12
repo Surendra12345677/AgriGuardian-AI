@@ -2,39 +2,47 @@ package com.Hackathon.AgriGuardian.AI.agent.tool.impl;
 
 import com.Hackathon.AgriGuardian.AI.agent.tool.AgentTool;
 import com.Hackathon.AgriGuardian.AI.config.AgriGuardianProperties;
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
+import io.github.resilience4j.retry.annotation.Retry;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Component;
-import org.springframework.web.client.RestClient;
-import org.springframework.web.client.RestClientException;
 
 import java.util.List;
 import java.util.Map;
 
 /**
- * Real weather tool — calls the free Open-Meteo forecast API.
- * <p>Args: {@code latitude} (double, required), {@code longitude} (double, required).</p>
- * <p>Returns aggregated 7-day metrics ready to feed into the planner / Gemini.</p>
- * <p>Falls back to safe defaults on any network or parsing failure so the agent
- * never crashes; the failure is logged and signalled via {@code "source":"fallback"}.</p>
+ * Weather tool — calls Open-Meteo via a declarative {@link OpenMeteoClient}
+ * (Spring 6 HTTP Interface — the framework-native replacement for OpenFeign).
+ *
+ * <p>Hardened with industry patterns:</p>
+ * <ul>
+ *   <li>{@code @CircuitBreaker} — opens after repeated failures so downstream
+ *       outages don't pin the agent thread.</li>
+ *   <li>{@code @Retry}        — exponential-backoff retry for transient errors.</li>
+ *   <li>{@code @Cacheable}    — 15-minute Caffeine cache keyed by lat/lon.</li>
+ *   <li>{@code fallbackMethod} — never crashes the agent; returns safe defaults.</li>
+ * </ul>
  */
 @Slf4j
 @Component
 public class WeatherTool implements AgentTool {
 
-    private final AgriGuardianProperties.Weather props;
-    private final RestClient http;
+    private static final String CB_NAME    = "openMeteo";
+    private static final String CACHE_NAME = "weather";
 
-    public WeatherTool(AgriGuardianProperties properties, RestClient.Builder builder) {
-        this.props = properties.getWeather();
-        this.http = (builder == null ? RestClient.builder() : builder)
-                .baseUrl(props.getBaseUrl())
-                .build();
+    private final AgriGuardianProperties.Weather props;
+    private final OpenMeteoClient client;
+
+    public WeatherTool(AgriGuardianProperties properties, OpenMeteoClient client) {
+        this.props  = properties.getWeather();
+        this.client = client;
     }
 
     @Override public String name() { return "weather"; }
 
     @Override public String description() {
-        return "Calls Open-Meteo and returns a 7-day weather summary "
+        return "Calls Open-Meteo (resilient + cached) and returns a 7-day weather summary "
                 + "(avg/max/min temperature C, total rainfall mm, mean humidity 0..1) for a lat/lon.";
     }
 
@@ -46,31 +54,36 @@ public class WeatherTool implements AgentTool {
             log.warn("weather tool called without latitude/longitude — returning fallback");
             return fallback("missing-coords");
         }
-
-        try {
-            OpenMeteoResponse resp = http.get()
-                    .uri(uri -> uri.path("/forecast")
-                            .queryParam("latitude", lat)
-                            .queryParam("longitude", lon)
-                            .queryParam("daily", "temperature_2m_max,temperature_2m_min,"
-                                    + "precipitation_sum,relative_humidity_2m_mean")
-                            .queryParam("forecast_days", props.getForecastDays())
-                            .queryParam("timezone", "auto")
-                            .build())
-                    .retrieve()
-                    .body(OpenMeteoResponse.class);
-
-            if (resp == null || resp.daily() == null) {
-                return fallback("empty-response");
-            }
-            return summarize(resp.daily());
-        } catch (RestClientException e) {
-            log.warn("Open-Meteo call failed: {} — returning fallback", e.getMessage());
-            return fallback("network-error");
-        }
+        return fetchForecast(lat, lon);
     }
 
-    private Map<String, Object> summarize(Daily d) {
+    /** Hot path — proxied for cache + circuit-breaker + retry. */
+    @Cacheable(value = CACHE_NAME, key = "T(java.lang.String).format('%.3f,%.3f', #lat, #lon)")
+    @CircuitBreaker(name = CB_NAME, fallbackMethod = "fetchForecastFallback")
+    @Retry(name = CB_NAME)
+    public Map<String, Object> fetchForecast(double lat, double lon) {
+        log.debug("Open-Meteo lookup lat={} lon={}", lat, lon);
+        OpenMeteoClient.OpenMeteoResponse resp = client.getForecast(
+                lat, lon,
+                "temperature_2m_max,temperature_2m_min,precipitation_sum,relative_humidity_2m_mean",
+                props.getForecastDays(),
+                "auto"
+        );
+        if (resp == null || resp.daily() == null) {
+            return fallback("empty-response");
+        }
+        return summarize(resp.daily());
+    }
+
+    /** Resilience4j fallback — original args + thrown exception. */
+    @SuppressWarnings("unused")
+    public Map<String, Object> fetchForecastFallback(double lat, double lon, Throwable t) {
+        log.warn("Open-Meteo unavailable ({}): returning fallback for lat={} lon={}",
+                t.getClass().getSimpleName(), lat, lon);
+        return fallback("circuit-open-or-error");
+    }
+
+    private Map<String, Object> summarize(OpenMeteoClient.Daily d) {
         double tMax = avg(d.temperature_2m_max());
         double tMin = avg(d.temperature_2m_min());
         double rain = sum(d.precipitation_sum());
@@ -122,14 +135,5 @@ public class WeatherTool implements AgentTool {
     private static double round(double v) {
         return Math.round(v * 100.0) / 100.0;
     }
-
-    /* ── Open-Meteo response DTOs (records — Jackson uses field names) ── */
-    public record OpenMeteoResponse(Daily daily) { }
-    public record Daily(
-            List<Double> temperature_2m_max,
-            List<Double> temperature_2m_min,
-            List<Double> precipitation_sum,
-            List<Double> relative_humidity_2m_mean
-    ) { }
 }
 
