@@ -1,0 +1,127 @@
+# ──────────────────────────────────────────────────────────────────────
+# AgriGuardian AI — Google Cloud Agent Builder specification
+#
+# This file defines the agent that will be deployed to Vertex AI Agent
+# Engine (Google Cloud Agent Builder) for the hackathon submission.
+#
+# Deploy (once GCP billing is enabled):
+#   gcloud auth login
+#   gcloud config set project <YOUR_PROJECT_ID>
+#   gcloud services enable aiplatform.googleapis.com discoveryengine.googleapis.com
+#   gcloud agent-builder agents create \
+#       --display-name "AgriGuardian AI" \
+#       --location us-central1 \
+#       --spec-file agent-builder/agriguardian-agent.yaml
+#
+# Architecture (see docs/HACKATHON_PLAN.md):
+#   Farmer → Agent Builder (Gemini 3 brain + tools below)
+#                 ├─ HTTP tools  → Spring Boot app (this repo, deployed to Cloud Run)
+#                 └─ MCP tools   → MongoDB MCP server (partner integration)
+# ──────────────────────────────────────────────────────────────────────
+
+displayName: AgriGuardian AI
+description: >
+  Agentic farm-advisor that plans crop strategy from weather + market data
+  and acts on the farmer's MongoDB-stored plan under human oversight.
+
+# ── Reasoning model ──────────────────────────────────────────────────
+model:
+  name: gemini-3-pro
+  # gemini-3-flash also acceptable for lower-cost demo
+  generationConfig:
+    temperature: 0.4
+    topP: 0.95
+    maxOutputTokens: 2048
+
+# ── System instruction ───────────────────────────────────────────────
+instruction: |
+  You are AgriGuardian, an expert agronomy assistant for smallholder farmers.
+
+  Goals (in order):
+    1. Recommend the most profitable + sustainable crop plan for the farm.
+    2. Generate a day-by-day task list the farmer can execute.
+    3. Predict the best time to sell.
+    4. Optimise pesticide usage to protect pollinators and biodiversity.
+
+  Rules:
+    - Use the `weather` tool for any climate decision.
+    - Use the `market` tool for pricing / sell-window decisions.
+    - Use the `mongo_mcp` tool to read past farm history before recommending,
+      and to PERSIST new tasks/recommendations after the farmer approves them.
+    - For destructive operations (update / delete), ask for explicit
+      confirmation from the user before invoking the tool.
+    - Always return structured JSON when asked for a plan, with keys:
+      { advice, tasks: [{day, action, why}], confidence: 0..1 }.
+
+# ── Tools the agent can call ─────────────────────────────────────────
+tools:
+  # HTTP tools — hosted by our Spring Boot service (Cloud Run).
+  - name: weather
+    description: 7-day weather summary for a lat/lon (Open-Meteo).
+    httpEndpoint:
+      url: ${CLOUD_RUN_URL}/api/v1/tools/weather
+      method: POST
+      auth:
+        type: GOOGLE_SERVICE_ACCOUNT
+    parameters:
+      type: object
+      required: [latitude, longitude]
+      properties:
+        latitude:  { type: number, description: "Farm latitude (decimal degrees)" }
+        longitude: { type: number, description: "Farm longitude (decimal degrees)" }
+
+  - name: market
+    description: Indicative price and recommended sell-window for a crop.
+    httpEndpoint:
+      url: ${CLOUD_RUN_URL}/api/v1/tools/market
+      method: POST
+      auth:
+        type: GOOGLE_SERVICE_ACCOUNT
+    parameters:
+      type: object
+      required: [crop]
+      properties:
+        crop: { type: string, description: "Crop name, e.g. wheat | maize | onion" }
+        date: { type: string, description: "Optional ISO date (yyyy-MM-dd)" }
+
+  - name: soil
+    description: Soil knowledge-base lookup (type, pH, fertility) for a lat/lon.
+    httpEndpoint:
+      url: ${CLOUD_RUN_URL}/api/v1/tools/soil
+      method: POST
+      auth:
+        type: GOOGLE_SERVICE_ACCOUNT
+    parameters:
+      type: object
+      required: [latitude, longitude]
+      properties:
+        latitude:  { type: number }
+        longitude: { type: number }
+
+  # ── Partner-track integration (REQUIRED for hackathon qualification) ──
+  - name: mongo_mcp
+    description: >
+      Read and mutate the farm database (farms / recommendations / tasks)
+      via the official MongoDB MCP server. Supports find, aggregate,
+      insert-one, update-many, list-collections.
+    mcpServer:
+      url: ${MCP_MONGODB_URL}
+      transport: STREAMABLE_HTTP
+      auth:
+        type: BEARER_TOKEN_SECRET
+        secretRef: projects/${GCP_PROJECT}/secrets/mcp-mongodb-token/versions/latest
+
+# ── Conversation starters shown in the Agent Builder UI ──────────────
+starters:
+  - "Recommend a crop plan for my 2-hectare farm at 18.52, 73.85."
+  - "What should I plant for the kharif season near Pune?"
+  - "When is the best month to sell wheat this year?"
+  - "Mark task T-1 as done and re-plan the week."
+
+# ── Safety + guardrails ──────────────────────────────────────────────
+safety:
+  hateSpeech:           BLOCK_MEDIUM_AND_ABOVE
+  harassment:           BLOCK_MEDIUM_AND_ABOVE
+  sexuallyExplicit:     BLOCK_MEDIUM_AND_ABOVE
+  dangerousContent:     BLOCK_MEDIUM_AND_ABOVE
+
