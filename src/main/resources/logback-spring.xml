@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    AgriGuardian AI — Logback configuration.
+    Registers our secret-redacting message converter and uses Spring Boot's
+    default console pattern, with the request id from CorrelationIdFilter.
+-->
+<configuration>
+    <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+    <include resource="org/springframework/boot/logging/logback/console-appender.xml"/>
+
+    <!-- "redact" pattern keyword → SecretRedactingConverter -->
+    <conversionRule conversionWord="redact"
+                    converterClass="com.Hackathon.AgriGuardian.AI.observability.SecretRedactingConverter"/>
+
+    <property name="CONSOLE_LOG_PATTERN"
+              value="%clr(%d{yyyy-MM-dd HH:mm:ss.SSS}){faint} %clr(%5p) [requestId=%X{requestId:-}] %clr(${PID:- }){magenta} %clr(---){faint} %clr([%15.15t]){faint} %clr(%-40.40logger{39}){cyan} %clr(:){faint} %redact%n%wEx"/>
+
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+    </root>
+
+    <logger name="com.Hackathon.AgriGuardian" level="DEBUG"/>
+</configuration>
+
