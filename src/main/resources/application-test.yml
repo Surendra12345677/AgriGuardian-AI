@@ -1,0 +1,18 @@
+# Test profile — keeps the agent boot-able without external dependencies.
+# Mongo is left lazily-connected (no operations are performed in unit/context tests),
+# Arize export is OFF, and Gemini always uses the deterministic stub.
+spring:
+  data:
+    mongodb:
+      uri: mongodb://localhost:27017/agriguardian-test
+      auto-index-creation: false
+agriguardian:
+  arize:
+    enabled: false
+  gemini:
+    stub-mode: always
+    api-key: ""
+logging:
+  level:
+    org.mongodb.driver: WARN
+
