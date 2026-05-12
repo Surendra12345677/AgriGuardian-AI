@@ -85,28 +85,43 @@ details.
 
 ## 🚀 Quick Start (PowerShell)
 
-### Prerequisites
+### Option A — Docker Compose (recommended, zero local setup)
+
+Requires only **Docker Desktop**. Spins up MongoDB + the app together.
+
+```powershell
+git clone https://github.com/Surendra12345677/AgriGuardian-AI.git
+cd AgriGuardian-AI
+Copy-Item .env.example .env       # edit if you have Gemini/Arize keys; otherwise leave blank for stub mode
+docker compose up -d --build
+docker compose logs -f app
+```
+
+### Option B — Local JDK
+
+#### Prerequisites
 - JDK 17 (Temurin recommended)
-- MongoDB on `localhost:27017` (or `docker compose up -d mongo`)
+- MongoDB on `localhost:27017`
 - *(Optional)* Gemini + Arize keys — the app **boots keyless** in stub mode
 
 ```powershell
-# clone
 git clone https://github.com/Surendra12345677/AgriGuardian-AI.git
 cd AgriGuardian-AI
-
-# configure
 Copy-Item .env.example .env
-# edit .env and paste your keys (or leave blank for stub mode)
-
-# run
 ./gradlew bootRun
 ```
 
-Then open:
+### Then open
+- 📘 Swagger UI: http://localhost:8080/swagger-ui.html
+- ❤️ Health:    http://localhost:8080/actuator/health
+- 📊 Metrics:   http://localhost:8080/actuator/prometheus
 
-- API docs: http://localhost:8080/swagger-ui.html
-- Health:   http://localhost:8080/actuator/health
+### Try the agent end-to-end
+```powershell
+$body = @{ farmId='farm-42'; latitude=18.52; longitude=73.85; preferredCrop='maize' } | ConvertTo-Json
+Invoke-RestMethod -Uri http://localhost:8080/api/v1/recommendations `
+                  -Method Post -ContentType 'application/json' -Body $body
+```
 
 > Stub mode means judges can evaluate the agent flow **without any API key**.
 
@@ -159,13 +174,17 @@ docs/             HACKATHON_PLAN.md (start here)                    (done)
 - [x] CI: Gradle build, CodeQL, Dependabot, Gitleaks
 - [x] Domain models (`Farm`, `Recommendation`, `Task`)
 - [x] Hackathon plan committed
-- [ ] Spring Data Mongo repositories
-- [ ] REST API + DTO validation + global error handler
-- [ ] `AgentOrchestrator` + `ToolRegistry` + first 3 tools
-- [ ] `GeminiClient` (real + stub) wired behind config flag
-- [ ] Arize OTel exporter + span attributes
+- [x] Spring Data Mongo repositories
+- [x] REST API + DTO validation + global error handler
+- [x] `AgentOrchestrator` + `ToolRegistry` + first 3 tools
+- [x] `GeminiClient` (real + stub) wired behind config flag
+- [x] Arize OTel exporter + span attributes
+- [x] Unit + MockMvc tests
+- [x] Swagger / OpenAPI UI
+- [x] Dockerfile + docker-compose for one-command demo
 - [ ] Optional Arize MCP client
-- [ ] Unit + MockMvc + Testcontainers tests
+- [ ] Real Open-Meteo + market price tools (replace stubs)
+- [ ] `/api/v1/farms` onboarding endpoint
 - [ ] Cloud Run deployment workflow
 - [ ] Next.js frontend (onboarding + dashboard)
 - [ ] 3-min demo video
