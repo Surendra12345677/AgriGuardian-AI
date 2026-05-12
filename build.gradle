@@ -1,0 +1,62 @@
+plugins {
+	id 'java'
+	id 'org.springframework.boot' version '4.0.6'
+	id 'io.spring.dependency-management' version '1.1.7'
+}
+
+group = 'com.Hackathon'
+version = '0.0.1-SNAPSHOT'
+
+java {
+	toolchain {
+		languageVersion = JavaLanguageVersion.of(17)
+	}
+}
+
+repositories {
+	mavenCentral()
+}
+
+ext {
+	otelVersion = '1.42.1'
+}
+
+dependencies {
+	// Web
+	implementation 'org.springframework.boot:spring-boot-starter-webmvc'
+	implementation 'org.springframework.boot:spring-boot-starter-validation'
+	implementation 'org.springframework.boot:spring-boot-starter-actuator'
+
+	// Reactive HTTP client (used for outbound calls to Gemini / weather / market / Arize MCP)
+	implementation 'org.springframework.boot:spring-boot-starter-webflux'
+
+	// Persistence
+	implementation 'org.springframework.boot:spring-boot-starter-data-mongodb'
+
+	// API docs
+	implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.6.0'
+
+	// Observability — OpenTelemetry → Arize
+	implementation "io.opentelemetry:opentelemetry-api:${otelVersion}"
+	implementation "io.opentelemetry:opentelemetry-sdk:${otelVersion}"
+	implementation "io.opentelemetry:opentelemetry-exporter-otlp:${otelVersion}"
+	implementation "io.opentelemetry:opentelemetry-sdk-trace:${otelVersion}"
+
+	// Structured JSON logs
+	implementation 'net.logstash.logback:logstash-logback-encoder:8.0'
+
+	// Utilities
+	compileOnly 'org.projectlombok:lombok:1.18.34'
+	annotationProcessor 'org.projectlombok:lombok:1.18.34'
+	testCompileOnly 'org.projectlombok:lombok:1.18.34'
+	testAnnotationProcessor 'org.projectlombok:lombok:1.18.34'
+
+	// Testing
+	testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
+	testImplementation 'org.springframework.boot:spring-boot-starter-test'
+	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+tasks.named('test') {
+	useJUnitPlatform()
+}

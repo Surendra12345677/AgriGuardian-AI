@@ -1,0 +1,68 @@
+spring:
+  application:
+    name: agriguardian-ai
+  data:
+    mongodb:
+      uri: ${MONGODB_URI:mongodb://localhost:27017/agriguardian}
+      auto-index-creation: true
+  threads:
+    virtual:
+      enabled: true
+
+server:
+  port: ${PORT:8080}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: when-authorized
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
+agriguardian:
+  gemini:
+    api-key: ${GEMINI_API_KEY:}
+    model: ${GEMINI_MODEL:gemini-2.0-flash}
+    base-url: https://generativelanguage.googleapis.com/v1beta
+    stub-mode: ${GEMINI_STUB_MODE:auto}   # auto | always | never
+    timeout-seconds: 30
+  arize:
+    enabled: ${ARIZE_ENABLED:true}
+    api-key: ${ARIZE_API_KEY:}
+    space-id: ${ARIZE_SPACE_ID:}
+    otlp-endpoint: ${ARIZE_OTLP_ENDPOINT:https://otlp.arize.com/v1}
+    mcp-url: ${ARIZE_MCP_URL:}
+    project-name: agriguardian-ai
+  weather:
+    base-url: https://api.open-meteo.com/v1
+  market:
+    # Mock market price source (deterministic + trend simulation)
+    use-mock: true
+
+logging:
+  level:
+    root: INFO
+    com.Hackathon.AgriGuardian: DEBUG
+
+---
+spring:
+  config:
+    activate:
+      on-profile: test
+  data:
+    mongodb:
+      uri: mongodb://localhost:27017/agriguardian-test
+agriguardian:
+  gemini:
+    stub-mode: always
+  arize:
+    enabled: false
+

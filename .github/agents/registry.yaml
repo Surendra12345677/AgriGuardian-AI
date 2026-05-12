@@ -1,0 +1,293 @@
+# Agent registry (v1.1.0) — used by `orchestrator-agent` for routing.
+#
+# `invoke_when` patterns:
+#   - "after:<agent>"        → triggered when the named agent completes successfully
+#   - "user:/<command>"      → triggered by an explicit slash-command
+#   - "before:*"             → runs before every other agent (context only)
+#   - "<event>"              → external event (pr_opened, new_ticket, deploy_done, alert_fired, ...)
+#   - "rework:from-<agent>"  → triggered by a feedback-loop restart
+#   - "*"                    → always (orchestrator only)
+#
+# Every agent inherits `_standards.md`. Per-agent overrides go below.
+
+registry_version: "1.2.0"
+envelope_version: "1.0.0"
+
+defaults:
+  timeout_seconds: 120
+  max_tokens: 32000
+  max_usd_per_call: 0.50
+  retry:
+    attempts: 2
+    backoff: exponential
+    initial_ms: 500
+    jitter: true
+  parallelism_group: serial
+  data_classification: internal
+
+agents:
+  - name: orchestrator-agent
+    version: "1.1.0"
+    role: Routes requests, plans execution, aggregates results, enforces budgets
+    invoke_when: ["*"]
+    file: agents/orchestrator-agent.agent.md
+    timeout_seconds: 600
+    max_usd_per_call: 5.00
+    parallelism_group: control-plane
+
+  - name: context-agent
+    version: "1.1.0"
+    role: Repo knowledge + session memory (always called first)
+    tools: [vector_search, file_search, read_file, semantic_search, usages, grep_search]
+    invoke_when: ["before:*"]
+    file: agents/context-agent.agent.md
+    timeout_seconds: 60
+    max_usd_per_call: 0.20
+    cache:
+      ttl_seconds: 600
+      key: "sha256(query + scope + repo_head_sha)"
+      invalidate_on: [git_push, file_change, adr_added]
+    parallelism_group: read-only
+
+  - name: business-analyst-agent
+    version: "1.1.0"
+    role: Requirements extraction (INVEST + MoSCoW + DoR + DoD)
+    invoke_when: ["new_ticket", "user:/requirements"]
+    handoff_to: [solution-architect-agent]
+    file: agents/business-analyst-agent.agent.md
+    parallelism_group: discovery
+
+  - name: solution-architect-agent
+    version: "1.1.0"
+    role: HLD + LLD + ADRs + NFR budgets + interface contracts + cost & DR
+    invoke_when: ["after:business-analyst-agent", "user:/design"]
+    handoff_to: [developer-agent]
+    file: agents/solution-architect-agent.agent.md
+    parallelism_group: design
+
+  - name: developer-agent
+    version: "1.1.0"
+    role: Implementation within a scoped file list (with migrations + feature flags + telemetry)
+    invoke_when:
+      - "after:solution-architect-agent"
+      - "user:/implement"
+      - "rework:from-code-reviewer-agent"
+      - "rework:from-security-agent"
+      - "rework:from-qa-agent"
+      - "rework:from-sre-agent"
+    handoff_to: [qa-agent, code-reviewer-agent, docs-agent]
+    file: agents/developer-agent.agent.md
+    timeout_seconds: 300
+    max_usd_per_call: 1.50
+    parallelism_group: build
+
+  - name: qa-agent
+    version: "1.1.0"
+    role: Test pyramid + coverage diff + mutation + flaky detection
+    invoke_when: ["after:developer-agent", "user:/test"]
+    handoff_to: [code-reviewer-agent]
+    rework_target: developer-agent
+    file: agents/qa-agent.agent.md
+    parallelism_group: verify
+
+  - name: code-reviewer-agent
+    version: "1.1.0"
+    role: Diff review with severity rubric + complexity metrics
+    invoke_when: ["pr_opened", "after:qa-agent", "user:/review"]
+    handoff_to: [security-agent]
+    rework_target: developer-agent
+    file: agents/code-reviewer-agent.agent.md
+    parallelism_group: verify
+
+  - name: docs-agent
+    version: "1.1.0"
+    role: Diátaxis-aligned docs (README, OpenAPI, ADRs, runbooks, CHANGELOG)
+    invoke_when: ["after:developer-agent", "user:/docs"]
+    handoff_to: [git-agent]
+    file: agents/docs-agent.agent.md
+    parallelism_group: verify
+
+  - name: security-agent
+    version: "1.1.0"
+    role: STRIDE + OWASP + secrets + SBOM + SLSA + IaC misconfig + license scan
+    invoke_when: ["pr_opened", "after:code-reviewer-agent", "user:/security"]
+    handoff_to: [devops-agent]
+    rework_target: developer-agent
+    file: agents/security-agent.agent.md
+    parallelism_group: verify-strict
+
+  - name: devops-agent
+    version: "1.1.0"
+    role: CI/CD + progressive delivery + GitOps + FinOps guardrails
+    invoke_when: ["after:security-agent", "user:/deploy", "user:/pipeline"]
+    handoff_to: [sre-agent]
+    file: agents/devops-agent.agent.md
+    parallelism_group: release
+
+  - name: git-agent
+    version: "1.1.0"
+    role: Branches, Conventional Commits (commitlint), DCO sign-off, PRs, semver bump
+    invoke_when: ["after:docs-agent", "user:/commit", "user:/pr"]
+    file: agents/git-agent.agent.md
+    parallelism_group: release
+
+  - name: sre-agent
+    version: "1.1.0"
+    role: SLOs + multi-window burn-rate alerts + chaos + capacity + postmortems
+    invoke_when:
+      - "after:devops-agent"
+      - "alert_fired"
+      - "incident_opened"
+      - "user:/observability"
+    rework_target: developer-agent
+    file: agents/sre-agent.agent.md
+    parallelism_group: operate
+
+# ─────────────────────────────────────────────────────────────────────────
+# Pipelines (named DAGs the orchestrator can pick by intent)
+# ─────────────────────────────────────────────────────────────────────────
+pipelines:
+  new_feature:
+    nodes:
+      - context-agent
+      - business-analyst-agent
+      - solution-architect-agent
+      - developer-agent
+      - { parallel: [qa-agent, code-reviewer-agent, docs-agent] }
+      - security-agent
+      - devops-agent
+      - git-agent
+      - sre-agent
+
+  bugfix:
+    nodes:
+      - context-agent
+      - developer-agent
+      - { parallel: [qa-agent, code-reviewer-agent] }
+      - security-agent
+      - git-agent
+
+  refactor:
+    nodes:
+      - context-agent
+      - solution-architect-agent
+      - developer-agent
+      - { parallel: [code-reviewer-agent, qa-agent] }
+      - git-agent
+
+  security_finding:
+    nodes:
+      - context-agent
+      - security-agent
+      - developer-agent
+      - { parallel: [qa-agent, code-reviewer-agent] }
+      - security-agent
+      - git-agent
+
+  incident:
+    nodes:
+      - context-agent
+      - sre-agent
+      - developer-agent
+      - { parallel: [qa-agent, code-reviewer-agent] }
+      - security-agent
+      - devops-agent
+      - docs-agent
+      - git-agent
+      - sre-agent
+
+  doc_update:
+    nodes:
+      - context-agent
+      - docs-agent
+      - git-agent
+
+# ─────────────────────────────────────────────────────────────────────────
+# Feedback loops — re-enter the SDLC, never patch ad-hoc.
+# ─────────────────────────────────────────────────────────────────────────
+feedback_loops:
+  - id: reviewer_rejects
+    trigger: "code-reviewer-agent.result.verdict in [BLOCK, REQUEST_CHANGES]"
+    restart_from: developer-agent
+    then_rerun: [qa-agent, code-reviewer-agent, security-agent]
+
+  - id: security_fails
+    trigger: "security-agent.result.verdict == FAIL"
+    restart_from: developer-agent
+    then_rerun: [qa-agent, code-reviewer-agent, security-agent]
+
+  - id: qa_fails
+    trigger: "qa-agent.result.coverage.new_code_line_pct < 85 OR qa-agent.result.results.failed > 0"
+    restart_from: developer-agent
+    then_rerun: [qa-agent, code-reviewer-agent]
+
+  - id: rollout_rolled_back
+    trigger: "devops-agent.result.rollout.rollback == true"
+    restart_from: developer-agent
+    then_rerun: [qa-agent, code-reviewer-agent, security-agent, devops-agent, sre-agent]
+
+  - id: incident_code_defect
+    trigger: "sre-agent.result.postmortem.root_cause == code_defect"
+    restart_from: business-analyst-agent
+    then_rerun:
+      - solution-architect-agent
+      - developer-agent
+      - qa-agent
+      - code-reviewer-agent
+      - security-agent
+      - devops-agent
+      - docs-agent
+      - git-agent
+      - sre-agent
+
+  - id: scope_violation
+    trigger: "any.errors[].code == SCOPE_VIOLATION"
+    restart_from: orchestrator-agent
+    then_rerun: [_resume_]
+
+  - id: misplaced_source_file
+    trigger: "developer-agent.result.files_changed[].path matches '^src/main/resources/.*\\.(java|kt|scala)$' OR developer-agent.result.files_changed[].path matches '^src/main/java/[^/]+\\.(java|kt)$'"
+    restart_from: developer-agent
+    then_rerun: [qa-agent, code-reviewer-agent]
+    reason: "Java/Kotlin source must live under src/main/java/<pkg>/, never under resources/ or directly under src/main/java/"
+
+  - id: smoke_test_failed
+    trigger: "orchestrator-agent.result.smoke.health_status != 2xx"
+    restart_from: developer-agent
+    then_rerun: [qa-agent, code-reviewer-agent]
+    reason: "App did not start or /actuator/health did not return 2xx; the build is not deliverable"
+
+  - id: missing_runtime_bootstrap
+    trigger: "developer-agent.result.requires_external_infra == true AND not exists(docker-compose.yml) AND not exists(application-dev.properties)"
+    restart_from: developer-agent
+    then_rerun: []
+    reason: "Service depends on infra (DB/queue) but provides no one-command bootstrap (compose) or in-memory dev profile"
+
+  - id: budget_exceeded
+    trigger: "any.errors[].code == BUDGET_EXCEEDED"
+    restart_from: user
+    then_rerun: []
+
+# ─────────────────────────────────────────────────────────────────────────
+# Loop & cost safety
+# ─────────────────────────────────────────────────────────────────────────
+guardrails:
+  max_rework_cycles_per_task: 3
+  max_total_usd_per_task: 25.00
+  max_total_seconds_per_task: 1800
+  no_convergence_after_cycles: 2
+  cancel_on:
+    - "user:/cancel"
+    - "budget_exceeded"
+    - "policy_violation_severity:fatal"
+
+# ─────────────────────────────────────────────────────────────────────────
+# Compliance frameworks the system claims to support
+# ─────────────────────────────────────────────────────────────────────────
+compliance:
+  - OWASP_Top_10_2021
+  - OWASP_ASVS_L2
+  - CIS_Docker_Benchmark
+  - SLSA_Level_3
+  - NIST_SSDF
+  - ISO_27001_A.14
