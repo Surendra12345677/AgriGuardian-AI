@@ -42,13 +42,6 @@ agriguardian:
     base-url: https://generativelanguage.googleapis.com/v1beta
     stub-mode: ${GEMINI_STUB_MODE:auto}   # auto | always | never
     timeout-seconds: 30
-  arize:
-    enabled: ${ARIZE_ENABLED:true}
-    api-key: ${ARIZE_API_KEY:}
-    space-id: ${ARIZE_SPACE_ID:}
-    otlp-endpoint: ${ARIZE_OTLP_ENDPOINT:https://otlp.arize.com/v1}
-    mcp-url: ${ARIZE_MCP_URL:}
-    project-name: agriguardian-ai
   mcp:
     # Partner-track integration: MongoDB MCP server
     # (run as a sidecar — see docker-compose.yml). The agent calls this
@@ -120,6 +113,4 @@ spring:
 agriguardian:
   gemini:
     stub-mode: always
-  arize:
-    enabled: false
 

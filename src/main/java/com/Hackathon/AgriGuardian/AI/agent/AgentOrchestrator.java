@@ -49,12 +49,18 @@ public class AgentOrchestrator {
             List<String> plan;
             Span planSpan = tracer.spanBuilder("planner.plan").startSpan();
             try (var s = planSpan.makeCurrent()) {
-                // The plan includes the MongoDB MCP tool when available — this is
-                // the partner-track integration. ToolRegistry.optional() returns
-                // an Optional so we silently skip it in stub-mode environments.
-                plan = tools.has("mongo.mcp")
-                        ? List.of("weather", "soil", "market", "mongo.mcp")
-                        : List.of("weather", "soil", "market");
+                // Plan rationale (Arize partner-track integration first):
+                //   1. arize.mcp — retrieve evaluation history of similar past
+                //      runs to inform reasoning (partner-track qualifier).
+                //   2. weather / soil / market — ground-truth data tools.
+                //   3. mongo.mcp — persist the resulting plan (action tool).
+                List<String> p = new java.util.ArrayList<>();
+                if (tools.has("arize.mcp")) p.add("arize.mcp");
+                p.add("weather");
+                p.add("soil");
+                p.add("market");
+                if (tools.has("mongo.mcp")) p.add("mongo.mcp");
+                plan = List.copyOf(p);
                 planSpan.setAttribute(AttributeKey.stringArrayKey("plan.tools"), plan);
             } finally { planSpan.end(); }
 
