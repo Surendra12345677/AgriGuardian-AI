@@ -1,8 +1,8 @@
 # 🌱 AgriGuardian AI
 
-> An **agentic farm-advisor** built on **Google Cloud Agent Builder**, grounded
-> in farm/weather/market data, reasoned by **Gemini**, and observed end-to-end
-> with **Arize AX**.
+> An **agentic farm-advisor** built on **Google Cloud Agent Builder** with
+> **Gemini 3**, grounded in real weather + market data, that uses the
+> **Arize MCP** server to learn from its own past runs.
 
 [![build](https://github.com/Surendra12345677/AgriGuardian-AI/actions/workflows/build.yml/badge.svg)](https://github.com/Surendra12345677/AgriGuardian-AI/actions/workflows/build.yml)
 [![codeql](https://github.com/Surendra12345677/AgriGuardian-AI/actions/workflows/codeql.yml/badge.svg)](https://github.com/Surendra12345677/AgriGuardian-AI/actions/workflows/codeql.yml)
@@ -11,10 +11,10 @@
 [![Java](https://img.shields.io/badge/Java-17-007396?logo=openjdk&logoColor=white)](https://adoptium.net/)
 [![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.0-6DB33F?logo=springboot&logoColor=white)](https://spring.io/projects/spring-boot)
 
-**Hackathon:** Google Cloud **Agent Builder** Hackathon
-**Observability partner:** Arize AX
-**Status:** 🚧 Work in progress — see [`docs/HACKATHON_PLAN.md`](./docs/HACKATHON_PLAN.md)
-**Demo video:** _coming soon_ · **Live URL:** _coming soon (Cloud Run)_
+**Hackathon:** Google Cloud Rapid Agent Hackathon — *Building Agents for Real-World Challenges*
+**Partner track:** 🟣 **Arize** (Arize MCP + Arize AX traces)
+**Status:** 🚧 Active development — see [`docs/HACKATHON_PLAN.md`](./docs/HACKATHON_PLAN.md)
+**Demo video:** _coming soon_ · **Live URL:** _pending GCP billing_
 
 ---
 
@@ -41,35 +41,43 @@ AgriGuardian AI is a **personal AI farming manager** that:
 
 | Capability | How |
 |---|---|
-| Plans tasks | Plan → tool-call → reflect loop in `AgentOrchestrator` |
-| Reasons about the future | Gemini + weather + market trend tools |
+| Plans tasks | Plan → tool-call → reflect loop, defined in Agent Builder + mirrored in `AgentOrchestrator` |
+| Self-aware | Calls **Arize MCP** `search_traces` to look up similar past runs *before* answering |
+| Reasons about the future | Gemini 3 + real weather + market trend tools |
+| Takes action | Persists plans to MongoDB via **MongoDB MCP** under human approval |
 | Adapts dynamically | Task status updates trigger re-planning |
-| Multi-step workflows | Onboard → recommend → plan → execute → sell |
-| Human-in-the-loop | Every task requires farmer confirmation |
-| Observed | Every step is a span in Arize AX |
+| Human-in-the-loop | Destructive ops require explicit farmer confirmation |
+| Observed | Every step is a span exported to Arize AX (OTLP) |
 
 ## 🏗️ Architecture
 
 ```mermaid
 flowchart LR
-    U[Farmer · Next.js UI] -->|REST| API[Spring Boot REST API]
-    API --> ORCH[AgentOrchestrator<br/>Agent Builder–compatible]
-    ORCH --> GEM[(Gemini<br/>gemini-2.0-flash)]
+    U[Farmer · UI / curl / Swagger] -->|REST| API[Spring Boot REST API]
+    U -->|chat| AB[Google Cloud<br/>Agent Builder]
+    AB -->|HTTP tools| API
+    AB -->|MCP| ARIZE_MCP[(Arize MCP<br/><b>partner track</b>)]
+    AB -->|MCP| MONGO_MCP[(MongoDB MCP<br/>action tool)]
+    AB -->|reason| GEM[(Gemini 3<br/>gemini-3-pro)]
+
+    API --> ORCH[AgentOrchestrator<br/>local fallback / dev mode]
     ORCH --> TOOLS{Tool Registry}
-    TOOLS --> WX[Weather · Open-Meteo]
-    TOOLS --> MKT[Market Price · mock/live]
-    TOOLS --> SOIL[Soil KB]
-    TOOLS --> PEST[Pesticide KB]
-    TOOLS --> ECO[Eco-Score Calc]
-    TOOLS --> DB[(MongoDB<br/>farms · tasks · recs)]
-    ORCH -. OTel spans .-> ARIZE[(Arize AX<br/>OTLP + optional MCP)]
+    TOOLS --> WX[weather · Open-Meteo]
+    TOOLS --> MKT[market · seasonal pricing]
+    TOOLS --> SOIL[soil KB]
+    TOOLS --> A_MCP[arize.mcp]
+    TOOLS --> M_MCP[mongo.mcp]
+    A_MCP --> ARIZE_MCP
+    M_MCP --> MONGO_MCP
+    MONGO_MCP --> DB[(MongoDB<br/>farms · recs · tasks)]
+    API --> DB
+    ORCH -. OTel spans .-> ARIZE_AX[(Arize AX<br/>traces + evals)]
     API -. health/metrics .-> ACT[Actuator]
 ```
 
 Spans emitted per request: `agent.run` → `planner.plan` → `tool.<name>` →
 `gemini.generate` → `reflector.reflect`. See
-[`docs/HACKATHON_PLAN.md`](./docs/HACKATHON_PLAN.md) §3 for the Arize wiring
-details.
+[`docs/HACKATHON_PLAN.md`](./docs/HACKATHON_PLAN.md) §3 for Arize wiring details.
 
 ## 🛠️ Tech Stack
 
@@ -121,9 +129,18 @@ Copy-Item .env.example .env
 
 ### Try the agent end-to-end
 ```powershell
-$body = @{ farmId='farm-42'; latitude=18.52; longitude=73.85; preferredCrop='maize' } | ConvertTo-Json
+# 1. The demo farm is auto-seeded on first dev boot:
+Invoke-RestMethod http://localhost:8080/api/v1/farms
+
+# 2. Ask the agent for a plan:
+$body = @{ farmId='<paste-id-from-above>'; latitude=18.52; longitude=73.85; preferredCrop='maize' } | ConvertTo-Json
 Invoke-RestMethod -Uri http://localhost:8080/api/v1/recommendations `
                   -Method Post -ContentType 'application/json' -Body $body
+
+# 3. Inspect any registered tool directly (what Agent Builder calls):
+Invoke-RestMethod -Uri http://localhost:8080/api/v1/tools/weather `
+                  -Method Post -ContentType 'application/json' `
+                  -Body (@{ latitude=18.52; longitude=73.85 } | ConvertTo-Json)
 ```
 
 > Stub mode means judges can evaluate the agent flow **without any API key**.
@@ -134,14 +151,17 @@ Sourced from [`.env.example`](./.env.example).
 
 | Variable | Required | Purpose |
 |---|---|---|
-| `GEMINI_API_KEY` | optional | Real Gemini calls; blank → deterministic stub |
-| `GEMINI_MODEL` | optional | Default `gemini-2.0-flash` |
+| `GEMINI_API_KEY` | optional | Real Gemini 3 calls; blank → deterministic stub |
+| `GEMINI_MODEL` | optional | Default `gemini-3-pro` (also accepts `gemini-3-flash`) |
 | `GEMINI_STUB_MODE` | optional | `auto` \| `always` \| `never` |
-| `ARIZE_ENABLED` | optional | `true` to export OTLP traces |
+| `ARIZE_ENABLED` | optional | `true` to export OTLP traces to Arize AX |
 | `ARIZE_API_KEY` | optional | Arize Service Key (Member role) |
 | `ARIZE_SPACE_ID` | optional | Arize space identifier |
 | `ARIZE_OTLP_ENDPOINT` | optional | Default `https://otlp.arize.com/v1` |
-| `ARIZE_MCP_URL` | optional | If your Arize space exposes MCP |
+| `MCP_ARIZE_ENABLED` | optional | `true` to enable Arize MCP (partner track) |
+| `MCP_ARIZE_URL` | optional | Arize MCP server URL |
+| `MCP_MONGODB_ENABLED` | optional | `true` to enable MongoDB MCP (action tool) |
+| `MCP_MONGODB_URL` | optional | Default `http://localhost:3000/mcp` |
 | `MONGODB_URI` | optional | Default `mongodb://localhost:27017/agriguardian` |
 | `PORT` | optional | Default `8080` |
 | `SPRING_PROFILES_ACTIVE` | optional | Default `dev` |
@@ -150,17 +170,21 @@ Sourced from [`.env.example`](./.env.example).
 
 ```
 src/main/java/com/Hackathon/AgriGuardian/AI/
-  domain/model/   Farm, Recommendation, Task                        (done)
-  domain/repo/    Spring Data Mongo repositories                    (todo)
-  api/            REST controllers + DTOs + GlobalExceptionHandler  (todo)
-  agent/          AgentOrchestrator, ToolRegistry, @AgentTool       (todo)
-  agent/tools/    Weather / Market / Soil / Pesticide / Eco         (todo)
-  ai/             GeminiClient (real + stub fallback)               (todo)
-  observability/  ArizeTracingConfig, ArizeMcpClient                (todo)
-  config/         Spring + OpenTelemetry + Mongo wiring             (todo)
+  domain/model/     Farm, Recommendation, Task                          (done)
+  domain/repo/      Spring Data Mongo repositories                      (done)
+  api/              REST controllers — Farm, Recommendation, Tool       (done)
+  api/dto/          Request/response records with bean-validation       (done)
+  agent/            AgentOrchestrator + ToolRegistry                    (done)
+  agent/tool/impl/  weather, market, soil, arize.mcp, mongo.mcp         (done)
+  ai/              GeminiClient (real + stub) — Gemini 3                (done)
+  mcp/             McpClient + Arize/MongoDB MCP wiring                 (done)
+  config/          Properties, HTTP client, Caffeine cache, OpenAPI     (done)
+  observability/   OTel → Arize AX, MDC filter, secret-redacting logs   (done)
+  bootstrap/       DemoSeedRunner (1 farm + 3 historical recs)          (done)
 
-docs/             HACKATHON_PLAN.md (start here)                    (done)
-.github/          CI, CodeQL, Dependabot, Gitleaks, templates       (done)
+agent-builder/      Vertex AI Agent Builder spec + deploy.ps1           (done)
+docs/               HACKATHON_PLAN.md (start here)                      (done)
+.github/            CI, CodeQL, Dependabot, Gitleaks, templates         (done)
 ```
 
 ## 🏆 Hackathon
@@ -211,7 +235,8 @@ See [`CONTRIBUTING.md`](./CONTRIBUTING.md) and the
 
 ## 🙏 Acknowledgements
 
-- Google **Agent Builder** + **Gemini** for the reasoning engine
-- **Arize AX** for trustworthy AI observability
+- Google Cloud **Agent Builder** + **Gemini 3** for the agent runtime and reasoning
+- **Arize AX** + **Arize MCP** for observability and self-aware retrieval
+- **MongoDB MCP** for the action-taking layer
 - **Open-Meteo** for free, open weather data
 
