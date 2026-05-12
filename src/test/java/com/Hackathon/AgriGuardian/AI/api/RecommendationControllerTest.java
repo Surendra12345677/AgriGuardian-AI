@@ -24,7 +24,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class RecommendationControllerTest {
 
     @Autowired MockMvc mvc;
-    @Autowired ObjectMapper json;
+    private final ObjectMapper json = new ObjectMapper();
 
     @MockitoBean AgentOrchestrator orchestrator;
     @MockitoBean RecommendationRepository repo;
