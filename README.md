@@ -84,7 +84,7 @@ Spans emitted per request: `agent.run` → `planner.plan` → `tool.<name>` →
 | Layer | Technology |
 |---|---|
 | Backend | Spring Boot 4 (Java 17, virtual threads) |
-| Frontend | Next.js 14 + TypeScript + Tailwind *(planned)* |
+| Frontend | **Next.js 15** App Router + React 19 + Tailwind (in [`web/`](./web)) |
 | Database | MongoDB |
 | LLM | Google **Gemini 3** (`gemini-3-pro`) |
 | Agent platform | Google Cloud **Agent Builder** (spec: [`agent-builder/agriguardian-agent.yaml`](./agent-builder/agriguardian-agent.yaml)) |
@@ -98,7 +98,8 @@ Spans emitted per request: `agent.run` → `planner.plan` → `tool.<name>` →
 
 ### Option A — Docker Compose (recommended, zero local setup)
 
-Requires only **Docker Desktop**. Spins up MongoDB + the app together.
+Requires only **Docker Desktop**. Spins up MongoDB + MongoDB MCP + the Spring Boot
+backend + the Next.js dashboard together.
 
 ```powershell
 git clone https://github.com/Surendra12345677/AgriGuardian-AI.git
@@ -107,6 +108,11 @@ Copy-Item .env.example .env       # edit if you have Gemini/Arize keys; otherwis
 docker compose up -d --build
 docker compose logs -f app
 ```
+
+Then open:
+- 🌐 **Dashboard** http://localhost:3000  ← the demo UI
+- 📘 Swagger UI    http://localhost:8080/swagger-ui.html
+- ❤️ Health        http://localhost:8080/actuator/health
 
 ### Option B — Local JDK
 
@@ -183,6 +189,7 @@ src/main/java/com/Hackathon/AgriGuardian/AI/
   bootstrap/       DemoSeedRunner (1 farm + 3 historical recs)          (done)
 
 agent-builder/      Vertex AI Agent Builder spec + deploy.ps1           (done)
+web/                Next.js 15 + React 19 demo dashboard                 (done)
 docs/               HACKATHON_PLAN.md (start here)                      (done)
 .github/            CI, CodeQL, Dependabot, Gitleaks, templates         (done)
 ```
@@ -218,9 +225,9 @@ docs/               HACKATHON_PLAN.md (start here)                      (done)
 - [x] Secret-redacting Logback converter (defence-in-depth for log lines)
 - [x] Unit + MockMvc tests
 - [x] Swagger / OpenAPI UI
-- [x] Dockerfile + docker-compose (app + mongo + mongodb-mcp)
+- [x] Dockerfile + docker-compose (app + mongo + mongodb-mcp + web)
+- [x] **Next.js 15 dashboard** (onboarding form + farm list + agent panel)
 - [ ] Cloud Run deployment (blocked on GCP billing)
-- [ ] Next.js frontend (onboarding + dashboard)
 - [ ] 3-min demo video
 
 ## 🤝 Contributing
