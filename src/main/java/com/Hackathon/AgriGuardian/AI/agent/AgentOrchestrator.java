@@ -60,9 +60,9 @@ public class AgentOrchestrator {
                 try (var s = ts.makeCurrent()) {
                     AgentTool tool = tools.require(toolName);
                     Map<String, Object> args = Map.of(
-                            "lat", req.latitude(),
-                            "lon", req.longitude(),
-                            "crop", req.preferredCrop() == null ? "" : req.preferredCrop()
+                            "latitude",  req.latitude(),
+                            "longitude", req.longitude(),
+                            "crop",      req.preferredCrop() == null ? "" : req.preferredCrop()
                     );
                     Map<String, Object> out = tool.invoke(args);
                     toolOutputs.put(toolName, out);
