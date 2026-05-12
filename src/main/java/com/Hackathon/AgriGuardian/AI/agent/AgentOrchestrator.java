@@ -1,0 +1,107 @@
+package com.Hackathon.AgriGuardian.AI.agent;
+
+import com.Hackathon.AgriGuardian.AI.agent.tool.AgentTool;
+import com.Hackathon.AgriGuardian.AI.agent.tool.ToolRegistry;
+import com.Hackathon.AgriGuardian.AI.ai.GeminiClient;
+import com.Hackathon.AgriGuardian.AI.api.dto.RecommendationRequest;
+import com.Hackathon.AgriGuardian.AI.domain.model.Recommendation;
+import com.Hackathon.AgriGuardian.AI.domain.repo.RecommendationRepository;
+import io.opentelemetry.api.common.AttributeKey;
+import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.api.trace.Tracer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;
+
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * The agent loop: <em>plan → tools → generate → reflect</em>.
+ * Each phase is its own OTel span so Arize AX can render the trace tree.
+ */
+@Service
+public class AgentOrchestrator {
+
+    private static final Logger log = LoggerFactory.getLogger(AgentOrchestrator.class);
+
+    private final ToolRegistry tools;
+    private final GeminiClient gemini;
+    private final RecommendationRepository repo;
+    private final Tracer tracer;
+
+    public AgentOrchestrator(ToolRegistry tools, GeminiClient gemini,
+                             RecommendationRepository repo, Tracer tracer) {
+        this.tools = tools;
+        this.gemini = gemini;
+        this.repo = repo;
+        this.tracer = tracer;
+    }
+
+    public Recommendation run(RecommendationRequest req) {
+        Span root = tracer.spanBuilder("agent.run")
+                .setAttribute(AttributeKey.stringKey("farm.id"), req.farmId())
+                .startSpan();
+        try (var rootScope = root.makeCurrent()) {
+
+            // ── plan ────────────────────────────────────────────────────────
+            List<String> plan;
+            Span planSpan = tracer.spanBuilder("planner.plan").startSpan();
+            try (var s = planSpan.makeCurrent()) {
+                plan = List.of("weather", "soil", "market");
+                planSpan.setAttribute(AttributeKey.stringArrayKey("plan.tools"), plan);
+            } finally { planSpan.end(); }
+
+            // ── tools ───────────────────────────────────────────────────────
+            Map<String, Object> toolOutputs = new LinkedHashMap<>();
+            for (String toolName : plan) {
+                Span ts = tracer.spanBuilder("tool." + toolName).startSpan();
+                try (var s = ts.makeCurrent()) {
+                    AgentTool tool = tools.require(toolName);
+                    Map<String, Object> args = Map.of(
+                            "lat", req.latitude(),
+                            "lon", req.longitude(),
+                            "crop", req.preferredCrop() == null ? "" : req.preferredCrop()
+                    );
+                    Map<String, Object> out = tool.invoke(args);
+                    toolOutputs.put(toolName, out);
+                } catch (Exception ex) {
+                    ts.recordException(ex);
+                    throw ex;
+                } finally { ts.end(); }
+            }
+
+            // ── generate ────────────────────────────────────────────────────
+            Map<String, Object> ctx = new LinkedHashMap<>(toolOutputs);
+            ctx.put("preferredCrop", req.preferredCrop());
+            String advice = gemini.generate(
+                    "You are AgriGuardian, a careful agronomy advisor. Reply as compact JSON " +
+                            "with keys: advice (string), tasks (string[]), confidence (0..1).",
+                    "Recommend the best crop plan for farm " + req.farmId(),
+                    ctx
+            );
+
+            // ── reflect ─────────────────────────────────────────────────────
+            String reflected;
+            Span reflectSpan = tracer.spanBuilder("reflector.reflect").startSpan();
+            try (var s = reflectSpan.makeCurrent()) {
+                // Pass-through critique stub — leaves room for future self-evaluation.
+                reflected = advice;
+            } finally { reflectSpan.end(); }
+
+            Recommendation rec = Recommendation.builder()
+                    .farmId(req.farmId())
+                    .reasoning(reflected)
+                    .confidenceScore(0.78)
+                    .traceId(root.getSpanContext().getTraceId())
+                    .build();
+            Recommendation saved = repo.save(rec);
+            log.info("Persisted recommendation id={} farmId={}", saved.getId(), saved.getFarmId());
+            return saved;
+        } finally {
+            root.end();
+        }
+    }
+}
+
