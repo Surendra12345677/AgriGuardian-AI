@@ -23,23 +23,23 @@ public class AgriGuardianProperties {
         /** API key — blank ⇒ stub mode kicks in. */
         private String apiKey = "";
         @NotBlank
-        private String model = "gemini-2.0-flash";
+        private String model = "gemini-3-pro";
         private String baseUrl = "https://generativelanguage.googleapis.com/v1beta";
         /** auto | always | never. */
         private String stubMode = "auto";
         private int timeoutSeconds = 30;
     }
 
+    /** Arize AX — observability + (via {@link Mcp.ArizeMcp}) the partner track. */
     @Data
     public static class Arize {
         private boolean enabled = false;
         private String apiKey = "";
         private String spaceId = "";
         private String otlpEndpoint = "https://otlp.arize.com/v1";
-        /** Optional — left blank when MCP is not used. */
-        private String mcpUrl = "";
         private String projectName = "agriguardian-ai";
     }
+
 
     @Data
     public static class Weather {
@@ -60,13 +60,25 @@ public class AgriGuardianProperties {
 
     /**
      * Model Context Protocol (MCP) partner integrations.
-     * The MongoDB MCP server gives the agent superpowers to query and mutate
-     * farm data under farmer supervision — this is the hackathon partner-track
-     * requirement.
+     *
+     * <p>The hackathon track we submit to is <strong>Arize</strong>, so
+     * {@link ArizeMcp} is the primary partner integration. {@link MongoDb}
+     * is kept as a secondary "action" tool so the agent can persist farm plans.</p>
      */
     @Data
     public static class Mcp {
+        private final ArizeMcp arize = new ArizeMcp();
         private final MongoDb mongodb = new MongoDb();
+
+        /** Arize MCP — partner-track qualifier. */
+        @Data
+        public static class ArizeMcp {
+            private boolean enabled = false;
+            private String url = "";
+            private String apiKey = "";
+            private String spaceId = "";
+            private int timeoutSeconds = 15;
+        }
 
         @Data
         public static class MongoDb {
