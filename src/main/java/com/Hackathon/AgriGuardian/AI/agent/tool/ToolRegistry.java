@@ -27,6 +27,11 @@ public class ToolRegistry {
         return t;
     }
 
+    /** Returns {@code true} if a tool with the given name is registered. */
+    public boolean has(String name) {
+        return tools.containsKey(name);
+    }
+
     public Map<String, AgentTool> all() {
         return tools;
     }

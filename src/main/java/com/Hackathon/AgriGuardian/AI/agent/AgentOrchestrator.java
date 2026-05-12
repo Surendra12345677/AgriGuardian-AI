@@ -49,7 +49,12 @@ public class AgentOrchestrator {
             List<String> plan;
             Span planSpan = tracer.spanBuilder("planner.plan").startSpan();
             try (var s = planSpan.makeCurrent()) {
-                plan = List.of("weather", "soil", "market");
+                // The plan includes the MongoDB MCP tool when available — this is
+                // the partner-track integration. ToolRegistry.optional() returns
+                // an Optional so we silently skip it in stub-mode environments.
+                plan = tools.has("mongo.mcp")
+                        ? List.of("weather", "soil", "market", "mongo.mcp")
+                        : List.of("weather", "soil", "market");
                 planSpan.setAttribute(AttributeKey.stringArrayKey("plan.tools"), plan);
             } finally { planSpan.end(); }
 
