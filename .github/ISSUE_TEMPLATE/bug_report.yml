@@ -1,0 +1,60 @@
+name: 🐛 Bug report
+description: Something in AgriGuardian AI is misbehaving.
+title: "[bug]: "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug report! Please fill out the sections below.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear and concise description of the bug.
+      placeholder: When I call POST /api/agent/recommend-crop with...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      placeholder: I expected the agent to return three crop candidates with reasoning.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      value: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      options:
+        - Backend (Spring Boot)
+        - Frontend (Next.js)
+        - Agent / Gemini integration
+        - Arize observability
+        - Database (MongoDB)
+        - Docs / README
+        - CI / DevOps
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version / commit SHA
+      placeholder: e.g. main @ 8301d7a
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs / screenshots
+      render: shell
+

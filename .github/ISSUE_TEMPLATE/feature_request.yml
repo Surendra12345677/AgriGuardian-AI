@@ -1,0 +1,38 @@
+name: ✨ Feature request
+description: Suggest a new capability for the AgriGuardian AI agent.
+title: "[feat]: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem are you trying to solve?
+      placeholder: As a farmer, I want...
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected area
+      options:
+        - Agent / planning
+        - New tool integration
+        - LLM / Gemini prompting
+        - Observability / Arize
+        - Frontend / UX
+        - Backend API
+        - DevOps / deployment
+        - Documentation
+    validations:
+      required: true
+
