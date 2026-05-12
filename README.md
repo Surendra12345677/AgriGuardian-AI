@@ -78,9 +78,11 @@ details.
 | Backend | Spring Boot 4 (Java 17, virtual threads) |
 | Frontend | Next.js 14 + TypeScript + Tailwind *(planned)* |
 | Database | MongoDB |
-| LLM | Google **Gemini** (`gemini-2.0-flash`) |
-| Agent platform | Google Cloud **Agent Builder** (compatible orchestrator) |
-| Observability | **Arize AX** (OpenTelemetry → OTLP, optional MCP) |
+| LLM | Google **Gemini 3** (`gemini-3-pro`) |
+| Agent platform | Google Cloud **Agent Builder** (spec: [`agent-builder/agriguardian-agent.yaml`](./agent-builder/agriguardian-agent.yaml)) |
+| **Partner integration** | **MongoDB MCP server** (Model Context Protocol) — qualifies for the MongoDB partner bucket |
+| Observability | **Arize AX** (OpenTelemetry → OTLP) |
+| Resilience | Resilience4j (Circuit Breaker + Retry) + Caffeine cache |
 | External APIs | Open-Meteo (weather), mock Market Price API |
 
 ## 🚀 Quick Start (PowerShell)
@@ -162,11 +164,11 @@ docs/             HACKATHON_PLAN.md (start here)                    (done)
 
 ## 🏆 Hackathon
 
-- **Event:** Google Cloud Agent Builder Hackathon
-- **Track:** Build a useful agent grounded in your own data
-- **Partner track:** Arize AX observability
-- **Criteria mapping:** see
-  [`docs/HACKATHON_PLAN.md`](./docs/HACKATHON_PLAN.md) §2
+- **Event:** Building Agents for Real-World Challenges (Google Cloud + Partners)
+- **Partner track:** 🍃 **MongoDB** — agent uses the official MongoDB MCP server to read & mutate farm data
+- **Brain:** Gemini 3 (`gemini-3-pro`) via Google Cloud Agent Builder
+- **Agent spec:** [`agent-builder/agriguardian-agent.yaml`](./agent-builder/agriguardian-agent.yaml)
+- **Criteria mapping:** see [`docs/HACKATHON_PLAN.md`](./docs/HACKATHON_PLAN.md) §2
 
 ## 🗺️ Roadmap
 
@@ -175,17 +177,19 @@ docs/             HACKATHON_PLAN.md (start here)                    (done)
 - [x] Domain models (`Farm`, `Recommendation`, `Task`)
 - [x] Hackathon plan committed
 - [x] Spring Data Mongo repositories
-- [x] REST API + DTO validation + global error handler
-- [x] `AgentOrchestrator` + `ToolRegistry` + first 3 tools
-- [x] `GeminiClient` (real + stub) wired behind config flag
-- [x] Arize OTel exporter + span attributes
+- [x] REST API + DTO validation + RFC 7807 error handler
+- [x] `AgentOrchestrator` + `ToolRegistry` + 4 tools
+- [x] `GeminiClient` (real + stub) — Gemini 3 (`gemini-3-pro`)
+- [x] Arize OTel exporter + correlation-id MDC filter
+- [x] Resilience4j circuit-breaker + retry + Caffeine cache
+- [x] Real Open-Meteo weather + seasonal market price tools
+- [x] **MongoDB MCP integration (partner-track qualifier)**
+- [x] Agent Builder YAML spec + deploy script
 - [x] Unit + MockMvc tests
 - [x] Swagger / OpenAPI UI
-- [x] Dockerfile + docker-compose for one-command demo
-- [ ] Optional Arize MCP client
-- [ ] Real Open-Meteo + market price tools (replace stubs)
+- [x] Dockerfile + docker-compose (app + mongo + mongodb-mcp)
 - [ ] `/api/v1/farms` onboarding endpoint
-- [ ] Cloud Run deployment workflow
+- [ ] Cloud Run deployment (blocked on GCP billing)
 - [ ] Next.js frontend (onboarding + dashboard)
 - [ ] 3-min demo video
 
