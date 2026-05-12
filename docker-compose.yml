@@ -26,6 +26,28 @@ services:
       timeout: 5s
       retries: 5
 
+  # ───────────────────────────────────────────────────────────────
+  # MongoDB MCP server (partner integration — hackathon-required).
+  # Speaks JSON-RPC 2.0 / Streamable-HTTP at http://mongodb-mcp:3000/mcp
+  # Image: official MongoDB Labs MCP server.
+  # ───────────────────────────────────────────────────────────────
+  mongodb-mcp:
+    image: mongodb/mongodb-mcp-server:latest
+    container_name: agriguardian-mongodb-mcp
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
+    environment:
+      MDB_MCP_CONNECTION_STRING: mongodb://mongo:27017/agriguardian
+      MDB_MCP_TRANSPORT: http
+      MDB_MCP_HTTP_PORT: "3000"
+      MDB_MCP_HTTP_HOST: "0.0.0.0"
+      # Read-only by default; flip to false to enable write tools (insert/update/delete)
+      MDB_MCP_READ_ONLY: "false"
+    ports:
+      - "3000:3000"
+
   app:
     build:
       context: .
@@ -35,18 +57,23 @@ services:
     depends_on:
       mongo:
         condition: service_healthy
+      mongodb-mcp:
+        condition: service_started
     environment:
       PORT: 8080
       SPRING_PROFILES_ACTIVE: dev
       MONGODB_URI: mongodb://mongo:27017/agriguardian
       # Pulled from .env (docker compose auto-loads it). Empty → stub mode.
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
-      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.0-flash}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3-pro}
       GEMINI_STUB_MODE: ${GEMINI_STUB_MODE:-auto}
       ARIZE_ENABLED: ${ARIZE_ENABLED:-false}
       ARIZE_API_KEY: ${ARIZE_API_KEY:-}
       ARIZE_SPACE_ID: ${ARIZE_SPACE_ID:-}
       ARIZE_OTLP_ENDPOINT: ${ARIZE_OTLP_ENDPOINT:-https://otlp.arize.com/v1}
+      # Partner-track MCP wiring
+      MCP_MONGODB_ENABLED: "true"
+      MCP_MONGODB_URL: "http://mongodb-mcp:3000/mcp"
     ports:
       - "8080:8080"
 
