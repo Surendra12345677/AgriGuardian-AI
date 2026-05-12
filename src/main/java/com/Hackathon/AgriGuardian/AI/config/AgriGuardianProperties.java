@@ -16,6 +16,7 @@ public class AgriGuardianProperties {
     private final Arize arize = new Arize();
     private final Weather weather = new Weather();
     private final Market market = new Market();
+    private final Mcp mcp = new Mcp();
 
     @Data
     public static class Gemini {
@@ -55,6 +56,24 @@ public class AgriGuardianProperties {
         private boolean useMock = true;
         /** Reserved for a future real provider (e.g. AGMARKNET). */
         private String baseUrl = "";
+    }
+
+    /**
+     * Model Context Protocol (MCP) partner integrations.
+     * The MongoDB MCP server gives the agent superpowers to query and mutate
+     * farm data under farmer supervision — this is the hackathon partner-track
+     * requirement.
+     */
+    @Data
+    public static class Mcp {
+        private final MongoDb mongodb = new MongoDb();
+
+        @Data
+        public static class MongoDb {
+            private boolean enabled = false;
+            private String url = "http://localhost:3000/mcp";
+            private int timeoutSeconds = 15;
+        }
     }
 }
 
