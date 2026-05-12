@@ -16,10 +16,16 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,metrics,prometheus
+        include: health,info,metrics,prometheus,caches,circuitbreakers
   endpoint:
     health:
       show-details: when-authorized
+  health:
+    circuitbreakers:
+      enabled: true
+  metrics:
+    tags:
+      application: agriguardian-ai
 
 springdoc:
   api-docs:
@@ -51,6 +57,32 @@ logging:
   level:
     root: INFO
     com.Hackathon.AgriGuardian: DEBUG
+  pattern:
+    # Include the X-Request-Id (set by CorrelationIdFilter) in every log line.
+    level: "%5p [requestId=%X{requestId:-}]"
+
+# ── Resilience4j — circuit breaker / retry for outbound HTTP ───────────
+resilience4j:
+  circuitbreaker:
+    instances:
+      openMeteo:
+        slidingWindowType: COUNT_BASED
+        slidingWindowSize: 10
+        minimumNumberOfCalls: 5
+        failureRateThreshold: 50          # %
+        waitDurationInOpenState: 30s
+        permittedNumberOfCallsInHalfOpenState: 3
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+  retry:
+    instances:
+      openMeteo:
+        maxAttempts: 3
+        waitDuration: 500ms
+        enableExponentialBackoff: true
+        exponentialBackoffMultiplier: 2.0
+        retryExceptions:
+          - org.springframework.web.client.RestClientException
+          - java.io.IOException
 
 ---
 spring:

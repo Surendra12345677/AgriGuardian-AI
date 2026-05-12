@@ -19,6 +19,7 @@ repositories {
 
 ext {
 	otelVersion = '1.42.1'
+	resilience4jVersion = '2.2.0'
 }
 
 dependencies {
@@ -32,6 +33,17 @@ dependencies {
 
 	// Persistence
 	implementation 'org.springframework.boot:spring-boot-starter-data-mongodb'
+
+	// Caching (Caffeine) — wraps outbound HTTP for cost + latency
+	implementation 'org.springframework.boot:spring-boot-starter-cache'
+	implementation 'com.github.ben-manes.caffeine:caffeine:3.1.8'
+
+	// Resilience — circuit breaker / retry / timeout / bulkhead with annotations
+	implementation "io.github.resilience4j:resilience4j-spring-boot3:${resilience4jVersion}"
+	implementation "io.github.resilience4j:resilience4j-reactor:${resilience4jVersion}"
+	// AOP for the annotation-driven aspects (Boot 4 no longer ships starter-aop)
+	implementation 'org.springframework:spring-aspects'
+	implementation 'org.aspectj:aspectjweaver:1.9.22.1'
 
 	// Prometheus metrics endpoint
 	runtimeOnly 'io.micrometer:micrometer-registry-prometheus'
@@ -63,3 +75,9 @@ dependencies {
 tasks.named('test') {
 	useJUnitPlatform()
 }
+
+// Populate /actuator/info with build metadata (version, time, group, name).
+springBoot {
+	buildInfo()
+}
+
