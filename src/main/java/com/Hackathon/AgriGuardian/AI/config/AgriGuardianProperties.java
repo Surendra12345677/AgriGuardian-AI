@@ -14,6 +14,8 @@ public class AgriGuardianProperties {
 
     private final Gemini gemini = new Gemini();
     private final Arize arize = new Arize();
+    private final Weather weather = new Weather();
+    private final Market market = new Market();
 
     @Data
     public static class Gemini {
@@ -36,6 +38,23 @@ public class AgriGuardianProperties {
         /** Optional — left blank when MCP is not used. */
         private String mcpUrl = "";
         private String projectName = "agriguardian-ai";
+    }
+
+    @Data
+    public static class Weather {
+        /** Base URL of the Open-Meteo forecast service. */
+        private String baseUrl = "https://api.open-meteo.com/v1";
+        /** Number of forecast days to request (1..16). */
+        private int forecastDays = 7;
+        private int timeoutSeconds = 10;
+    }
+
+    @Data
+    public static class Market {
+        /** When true, no external HTTP call is made; uses deterministic in-memory pricing. */
+        private boolean useMock = true;
+        /** Reserved for a future real provider (e.g. AGMARKNET). */
+        private String baseUrl = "";
     }
 }
 
