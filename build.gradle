@@ -51,11 +51,8 @@ dependencies {
 	// API docs
 	implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.6.0'
 
-	// Observability — OpenTelemetry → Arize
+	// Observability — internal trace ids only (no external exporter)
 	implementation "io.opentelemetry:opentelemetry-api:${otelVersion}"
-	implementation "io.opentelemetry:opentelemetry-sdk:${otelVersion}"
-	implementation "io.opentelemetry:opentelemetry-exporter-otlp:${otelVersion}"
-	implementation "io.opentelemetry:opentelemetry-sdk-trace:${otelVersion}"
 
 	// Structured JSON logs
 	implementation 'net.logstash.logback:logstash-logback-encoder:8.0'

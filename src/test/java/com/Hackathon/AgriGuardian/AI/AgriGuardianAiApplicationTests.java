@@ -8,7 +8,6 @@ import org.springframework.test.context.TestPropertySource;
 @SpringBootTest
 @ActiveProfiles("test")
 @TestPropertySource(properties = {
-		"agriguardian.arize.enabled=false",
 		"agriguardian.gemini.stub-mode=always"
 })
 class AgriGuardianAiApplicationTests {
