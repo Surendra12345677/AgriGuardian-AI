@@ -7,6 +7,7 @@ import io.opentelemetry.api.trace.Tracer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientResponseException;
 
 import java.util.List;
 import java.util.Map;
@@ -55,9 +56,17 @@ public class GeminiClientReal implements GeminiClient {
                     .body(Map.class);
 
             return extractText(resp);
+        } catch (RestClientResponseException http) {
+            // Log the full response body so model-not-found / quota / auth errors are visible.
+            String body = http.getResponseBodyAsString();
+            log.warn("Gemini HTTP {} for model={} : {}",
+                    http.getStatusCode(), cfg.getModel(),
+                    body.length() > 800 ? body.substring(0, 800) + "...[truncated]" : body);
+            span.recordException(http);
+            return "{\"advice\":\"Gemini call failed — please retry.\",\"tasks\":[],\"confidence\":0.0}";
         } catch (Exception ex) {
             span.recordException(ex);
-            log.warn("Gemini call failed, returning empty advice: {}", ex.getMessage());
+            log.warn("Gemini call failed, returning empty advice: {}", ex.toString());
             return "{\"advice\":\"Gemini call failed — please retry.\",\"tasks\":[],\"confidence\":0.0}";
         } finally {
             span.end();
