@@ -18,7 +18,11 @@ repositories {
 }
 
 ext {
-	otelVersion = '1.42.1'
+	// Bumped from 1.42.1 to 1.55.0 so opentelemetry-api lines up with the
+	// opentelemetry-context / -common transitive deps that Spring Boot 4
+	// pulls in. Mismatched versions caused OtlpHttpSpanExporterBuilder
+	// to crash on a missing HttpExporterBuilder constructor at startup.
+	otelVersion = '1.55.0'
 	resilience4jVersion = '2.2.0'
 }
 
@@ -51,8 +55,13 @@ dependencies {
 	// API docs
 	implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.6.0'
 
-	// Observability — internal trace ids only (no external exporter)
+	// Observability — OpenTelemetry SDK + OTLP/HTTP exporter to Arize AX
+	// (this is the partner-track integration that ships traces of every
+	// Gemini call + tool invocation to the Arize dashboard).
 	implementation "io.opentelemetry:opentelemetry-api:${otelVersion}"
+	implementation "io.opentelemetry:opentelemetry-sdk:${otelVersion}"
+	implementation "io.opentelemetry:opentelemetry-exporter-otlp:${otelVersion}"
+	implementation "io.opentelemetry.semconv:opentelemetry-semconv:1.27.0-alpha"
 
 	// Structured JSON logs
 	implementation 'net.logstash.logback:logstash-logback-encoder:8.0'
