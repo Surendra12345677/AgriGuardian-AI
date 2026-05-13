@@ -2,14 +2,15 @@
 
 import { useEffect, useState } from "react";
 
-type LinkDef = { label: string; section: string; tab?: "plan" | "scenarios" | "doctor" };
+type LinkDef = { label: string; section: string };
 
 const LINKS: LinkDef[] = [
-  { label: "Live Agent",   section: "workspace", tab: "plan" },
-  { label: "What-if",      section: "workspace", tab: "scenarios" },
-  { label: "Plant Doctor", section: "workspace", tab: "doctor" },
-  { label: "How it works", section: "how" },
-  { label: "Stack",        section: "stack" },
+  { label: "Onboard",      section: "onboard"   },
+  { label: "Plan",         section: "plan"      },
+  { label: "What-if",      section: "scenarios" },
+  { label: "Plant Doctor", section: "doctor"    },
+  { label: "How it works", section: "how"       },
+  { label: "Stack",        section: "stack"     },
 ];
 
 export default function Navbar() {
@@ -43,25 +44,8 @@ export default function Navbar() {
   }, []);
 
   function go(l: LinkDef) {
-    if (l.tab) {
-      window.dispatchEvent(new CustomEvent("ag:tab", { detail: l.tab }));
-    }
     document.getElementById(l.section)?.scrollIntoView({ behavior: "smooth", block: "start" });
     setOpen(false);
-  }
-
-  // Active highlight: workspace uses sub-tab via a shared tab state we read from a data attr.
-  const [activeTab, setActiveTab] = useState<string | null>(null);
-  useEffect(() => {
-    const handler = (e: any) => setActiveTab(e.detail);
-    window.addEventListener("ag:tab-changed", handler);
-    return () => window.removeEventListener("ag:tab-changed", handler);
-  }, []);
-
-  function isActive(l: LinkDef) {
-    if (l.section !== active) return false;
-    if (l.tab && activeTab && l.tab !== activeTab) return false;
-    return true;
   }
 
   return (
@@ -73,7 +57,7 @@ export default function Navbar() {
           : "border-transparent bg-transparent backdrop-blur-md")
       }
     >
-      <div className="mx-auto max-w-7xl px-5 lg:px-8 h-16 flex items-center justify-between gap-4">
+      <div className="mx-auto max-w-screen-2xl px-5 lg:px-10 xl:px-14 h-16 flex items-center justify-between gap-4">
         <button onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
                 className="flex items-center gap-3 shrink-0">
           <span className="relative grid place-items-center h-9 w-9 rounded-xl
@@ -96,7 +80,7 @@ export default function Navbar() {
         <nav className="hidden lg:flex items-center gap-1 bg-white/[0.03] border border-white/5
                         rounded-full p-1">
           {LINKS.map(l => {
-            const a = isActive(l);
+            const a = l.section === active;
             return (
               <button key={l.label} onClick={() => go(l)}
                       className={
@@ -122,9 +106,9 @@ export default function Navbar() {
             </svg>
             GitHub
           </a>
-          <button onClick={() => go({ label: "x", section: "workspace", tab: "plan" })}
+          <button onClick={() => go({ label: "x", section: "onboard" })}
                   className="btn-primary text-sm !py-2 !px-3.5">
-            Try the agent
+            Get started
           </button>
           <button className="lg:hidden btn-ghost !p-2"
                   aria-label="Menu" onClick={() => setOpen(o => !o)}>
@@ -139,7 +123,7 @@ export default function Navbar() {
 
       {open && (
         <div className="lg:hidden border-t border-white/5 bg-[#05070b]/95 backdrop-blur-xl">
-          <div className="mx-auto max-w-7xl px-5 py-3 flex flex-col gap-1">
+          <div className="mx-auto max-w-screen-2xl px-5 py-3 flex flex-col gap-1">
             {LINKS.map(l => (
               <button key={l.label} onClick={() => go(l)}
                       className="text-left px-3 py-2 rounded-lg text-sm text-slate-300 hover:bg-white/[0.04]">

@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { api, type Farm, type Recommendation } from "@/lib/api";
 import { AgentTrace } from "./AgentTrace";
-import LanguageSelector, { type Lang } from "./LanguageSelector";
+import { type Lang } from "./LanguageSelector";
 import ImpactDashboard, { type Impact } from "./ImpactDashboard";
 import FarmMap from "./FarmMap";
 type Parsed = {
@@ -12,31 +12,6 @@ type Parsed = {
   confidence?: number;
   impact?: Impact;
   risks?: string[];
-};
-const DEMO_FALLBACK: Parsed = {
-  advice:
-    "Sow soybean (kharif) on the black-soil block — moisture retention is high and current mandi prices favour pulses. Reserve 0.5 acre for onion (rabi) to smooth cash flow.",
-  crop: "Soybean + Onion (split)",
-  confidence: 0.74,
-  impact: {
-    expectedRevenueInr: 92000,
-    extraIncomeInr: 38400,
-    yieldDeltaPct: 18,
-    waterSavingsPct: 22,
-    costInr: 28500,
-    paybackWeeks: 14,
-  },
-  tasks: [
-    { day: 1,  action: "Deep ploughing + 2t FYM/acre",         why: "Improves soil structure before sowing." },
-    { day: 7,  action: "Sow soybean JS-335 @ 75 kg/acre",      why: "Variety suited to medium rainfall belt." },
-    { day: 21, action: "First weeding + 20:40:0 NPK basal",    why: "Critical 3-week weed-free window." },
-    { day: 45, action: "Foliar spray 2% urea if pod-set lag",  why: "Boosts seed-fill if monsoon stresses the crop." },
-  ],
-  risks: [
-    "Mid-season dry spell can drop yields ~12% — keep 1 protective irrigation in reserve.",
-    "Yellow Mosaic Virus pressure in district — scout weekly and rogue infected plants.",
-    "Mandi price floor at ₹4,200/q assumed — consider FPO aggregation for bargaining power.",
-  ],
 };
 export default function AgentPanel({
   farm, language, onLanguageChange,
@@ -82,7 +57,8 @@ export default function AgentPanel({
   })();
   const usedFallback = !!rec
     && !parsed.advice && !parsed.crop && !(parsed.tasks?.length) && !parsed.impact;
-  const view: Parsed = usedFallback ? DEMO_FALLBACK : parsed;
+  const view: Parsed = parsed;
+  const noStructured = usedFallback;
   const latencyMs = tStart && tEnd ? Math.round(tEnd - tStart) : null;
   const conf = view.confidence ?? (rec?.confidenceScore ?? 0);
   return (
@@ -107,15 +83,9 @@ export default function AgentPanel({
             </div>
           )}
         </div>
-        <div className="mt-3">
-          <span className="label">Reply language</span>
-          <div className="mt-1.5">
-            <LanguageSelector value={language} onChange={onLanguageChange} />
-          </div>
-        </div>
         {!farm ? (
           <p className="mt-4 text-sm text-slate-500 italic">
-            Pick a farm on the left, or click <em>One-click demo farm</em>.
+            Select or onboard a farm in Step 1 above to enable the planner.
           </p>
         ) : (
           <div className="mt-4 flex gap-2 items-end flex-wrap">
@@ -149,11 +119,11 @@ export default function AgentPanel({
                     Recommended crop · {view.crop}
                   </div>
                 )}
-                {usedFallback && (
+                {noStructured && (
                   <div className="mt-1 inline-flex items-center gap-1 text-[10px]
                                   uppercase tracking-wider text-amber-300/90 font-semibold">
                     <span className="h-1.5 w-1.5 rounded-full bg-amber-300 animate-pulse" />
-                    Showing curated baseline · model returned no JSON
+                    Model returned no structured plan — showing raw text below
                   </div>
                 )}
               </div>
