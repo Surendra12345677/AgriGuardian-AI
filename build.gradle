@@ -52,8 +52,15 @@ dependencies {
 	// Prometheus metrics endpoint
 	runtimeOnly 'io.micrometer:micrometer-registry-prometheus'
 
-	// API docs
-	implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.6.0'
+	// API docs — DISABLED: springdoc-openapi 2.6.0 is built for Spring 6 and
+	// crashes on Spring Boot 4 / Spring 7 (NoSuchMethodError on
+	// ControllerAdviceBean(Object)). Re-enable once springdoc ships a
+	// Spring-7-compatible release. Use the Next.js frontend or curl/Postman
+	// against the REST endpoints in the meantime.
+	// implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.6.0'
+	// Keep swagger-annotations directly so controllers' @Tag/@Operation
+	// annotations still compile (they're harmless without springdoc to scan them).
+	implementation 'io.swagger.core.v3:swagger-annotations-jakarta:2.2.22'
 
 	// Observability — OpenTelemetry SDK + OTLP/HTTP exporter to Arize AX
 	// (this is the partner-track integration that ships traces of every
