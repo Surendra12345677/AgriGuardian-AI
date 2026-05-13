@@ -46,12 +46,29 @@ agriguardian:
     base-url: https://generativelanguage.googleapis.com/v1beta
     stub-mode: ${GEMINI_STUB_MODE:auto}   # auto | always | never
     timeout-seconds: 30
+  # ── Arize AX — hackathon PARTNER TRACK (Arize bucket) ─────────────────
+  # Arize gives the agent observability + evaluation "superpowers":
+  # every Gemini call + tool invocation is traced via OpenTelemetry to
+  # Arize, and the agent uses the Arize MCP server to query its own
+  # eval results and self-correct. This is what qualifies the project
+  # for the Arize partner bucket.
+  arize:
+    enabled: ${ARIZE_ENABLED:false}
+    api-key: ${ARIZE_API_KEY:}
+    space-id: ${ARIZE_SPACE_ID:}
+    otlp-endpoint: ${ARIZE_OTLP_ENDPOINT:https://otlp.arize.com/v1}
+    project-name: ${ARIZE_PROJECT_NAME:agriguardian-ai}
   mcp:
-    # Partner-track integration: MongoDB MCP server
-    # (run as a sidecar — see docker-compose.yml). The agent calls this
-    # over JSON-RPC 2.0 / HTTP+SSE to query and mutate the farm database
-    # under farmer supervision. This is what qualifies us for the
-    # MongoDB partner bucket in the hackathon.
+    # Arize MCP — partner-track qualifier (primary integration).
+    # JSON-RPC 2.0 over HTTP/SSE. Keys are passed as request headers.
+    arize:
+      enabled: ${MCP_ARIZE_ENABLED:false}
+      url: ${MCP_ARIZE_URL:https://mcp.arize.com/v1}
+      api-key: ${ARIZE_API_KEY:}
+      space-id: ${ARIZE_SPACE_ID:}
+      timeout-seconds: 15
+    # Secondary, optional: MongoDB MCP for action-taking (persisting
+    # farm plans). NOT our partner-track submission.
     mongodb:
       enabled: ${MCP_MONGODB_ENABLED:false}
       url: ${MCP_MONGODB_URL:http://localhost:3000/mcp}

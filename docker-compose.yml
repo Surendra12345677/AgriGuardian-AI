@@ -29,8 +29,10 @@ services:
       retries: 5
 
   # ───────────────────────────────────────────────────────────────
-  # MongoDB MCP server (partner integration — hackathon-required).
-  # Speaks JSON-RPC 2.0 / Streamable-HTTP at http://mongodb-mcp:3000/mcp
+  # MongoDB MCP server — SECONDARY action tool (NOT our partner track).
+  # Our hackathon partner track is **Arize** (see ArizeMcpConfig + README).
+  # This sidecar lets the agent persist farm plans via JSON-RPC 2.0 /
+  # Streamable-HTTP at http://mongodb-mcp:3000/mcp.
   # Image: official MongoDB Labs MCP server.
   # ───────────────────────────────────────────────────────────────
   mongodb-mcp:
