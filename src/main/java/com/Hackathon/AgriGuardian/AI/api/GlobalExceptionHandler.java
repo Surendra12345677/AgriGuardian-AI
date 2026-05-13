@@ -9,6 +9,7 @@ import org.springframework.http.ProblemDetail;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.net.URI;
 import java.time.Instant;
@@ -46,6 +47,17 @@ public class GlobalExceptionHandler {
         return problem(HttpStatus.NOT_FOUND,
                 "Not Found",
                 ex.getMessage(),
+                "/problems/not-found",
+                Map.of());
+    }
+
+    /** Translate Spring's "no static resource / no handler for path" into a clean 404
+     *  instead of letting it fall through to the catch-all 500 handler. */
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ProblemDetail handleNoResource(NoResourceFoundException ex) {
+        return problem(HttpStatus.NOT_FOUND,
+                "Not Found",
+                "No handler for " + ex.getResourcePath(),
                 "/problems/not-found",
                 Map.of());
     }

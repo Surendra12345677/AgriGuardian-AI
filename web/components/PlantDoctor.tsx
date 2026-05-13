@@ -32,7 +32,12 @@ export default function PlantDoctor({ language }: { language: Lang }) {
     try {
       const out = await api.diagnose({ crop, symptoms, language });
       let parsed: Diag = {};
-      try { parsed = JSON.parse(out.raw); } catch { parsed = { explanation: out.raw }; }
+      try { parsed = JSON.parse(out.raw); } catch {
+        // Gemini may add preamble or fences around JSON
+        const m = out.raw?.match(/\{[\s\S]*\}/);
+        if (m) try { parsed = JSON.parse(m[0]); } catch {}
+        if (!parsed.diagnosis) parsed = { explanation: out.raw, diagnosis: "See details below", confidence: 0.5, urgency: "MEDIUM" };
+      }
       setDiag(parsed);
     } catch (err: any) {
       setError(err.message);
@@ -98,7 +103,13 @@ export default function PlantDoctor({ language }: { language: Lang }) {
 
       {error && <p className="text-sm text-red-300">{error}</p>}
 
-      {diag && (
+      {busy && (
+        <div className="rounded-xl border border-emerald-400/20 bg-emerald-400/[0.04] p-4 text-center text-sm text-emerald-300 animate-pulse">
+          🩺 Diagnosing with Gemini…
+        </div>
+      )}
+
+      {diag && !busy && (
         <div className="rounded-xl border border-emerald-400/20 bg-emerald-400/[0.04] p-4 space-y-3">
           <div className="flex items-center justify-between flex-wrap gap-2">
             <div>
