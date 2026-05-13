@@ -66,5 +66,6 @@ Desktop.ini
 *.tmp
 *.bak
 *.swp
+*.log
 coverage/
 

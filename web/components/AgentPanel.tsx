@@ -2,33 +2,52 @@
 
 import { useState } from "react";
 import { api, type Farm, type Recommendation } from "@/lib/api";
+import { AgentTrace } from "./AgentTrace";
+import LanguageSelector, { type Lang } from "./LanguageSelector";
+import ImpactDashboard, { type Impact } from "./ImpactDashboard";
+import FarmMap from "./FarmMap";
 
 type Parsed = {
   advice?: string;
+  crop?: string;
   tasks?: (string | { day?: number; action?: string; why?: string })[];
   confidence?: number;
+  impact?: Impact;
+  risks?: string[];
 };
 
-export default function AgentPanel({ farm }: { farm?: Farm }) {
+export default function AgentPanel({
+  farm, language, onLanguageChange,
+}: {
+  farm?: Farm;
+  language: Lang;
+  onLanguageChange: (l: Lang) => void;
+}) {
   const [crop, setCrop]   = useState("");
   const [busy, setBusy]   = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [rec,  setRec]    = useState<Recommendation | null>(null);
+  const [tStart, setTStart] = useState<number | null>(null);
+  const [tEnd,   setTEnd]   = useState<number | null>(null);
 
   async function ask() {
     if (!farm) return;
-    setBusy(true); setError(null); setRec(null);
+    setBusy(true); setError(null); setRec(null); setTEnd(null);
+    setTStart(performance.now());
     try {
       const out = await api.recommend({
         farmId:    farm.id,
         latitude:  farm.latitude,
         longitude: farm.longitude,
-        preferredCrop: crop || undefined
+        preferredCrop: crop || undefined,
+        language,
+        scenario: "BASELINE",
       });
       setRec(out);
     } catch (err: any) {
       setError(err.message);
     } finally {
+      setTEnd(performance.now());
       setBusy(false);
     }
   }
@@ -38,85 +57,202 @@ export default function AgentPanel({ farm }: { farm?: Farm }) {
     try { return JSON.parse(rec.reasoning); } catch { return { advice: rec.reasoning }; }
   })();
 
-  return (
-    <div className="bg-white/80 rounded-xl shadow-sm border border-emerald-100 p-5 space-y-4">
-      <div>
-        <h2 className="font-semibold text-emerald-800 text-lg">Ask the agent</h2>
-        <p className="text-xs text-slate-500">
-          Triggers the plan → tools → reflect loop. Each run is traced to Arize AX
-          and (when MCP is enabled) reads from past evals via the Arize MCP server.
-        </p>
-      </div>
+  const latencyMs = tStart && tEnd ? Math.round(tEnd - tStart) : null;
+  const conf = parsed.confidence ?? rec?.confidenceScore ?? 0;
 
-      {!farm ? (
-        <p className="text-sm text-slate-500 italic">
-          Select a farm from the list to ask the agent for a plan.
-        </p>
-      ) : (
-        <>
-          <div className="flex gap-2 items-end">
-            <label className="text-xs text-slate-600 flex-1 space-y-1 block">
-              <span>Preferred crop (optional)</span>
-              <input className="w-full rounded-md border border-emerald-200 bg-white/70
-                                px-3 py-2 text-sm focus:outline-none focus:ring-2
-                                focus:ring-leaf-500"
-                     placeholder="e.g. maize, soybean, onion"
+  return (
+    <div className="space-y-4">
+      <div className="card p-5">
+        <div className="flex items-start justify-between gap-3 flex-wrap">
+          <div>
+            <h2 className="font-semibold text-slate-100 text-lg">Ask the agent</h2>
+            <p className="text-xs text-slate-400 mt-0.5 max-w-md">
+              Multi-step plan loop. Every span is exported to Arize AX over OTLP.
+            </p>
+          </div>
+          {farm && (
+            <div className="text-right">
+              <div className="text-xs text-slate-400">Selected farm</div>
+              <div className="text-sm text-slate-200 font-medium">{farm.farmerName}</div>
+              <div className="text-[11px] text-slate-500 font-mono">
+                {farm.latitude.toFixed(2)}, {farm.longitude.toFixed(2)} · {farm.soilType}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="mt-3">
+          <span className="label">Reply language</span>
+          <div className="mt-1.5">
+            <LanguageSelector value={language} onChange={onLanguageChange} />
+          </div>
+        </div>
+
+        {!farm ? (
+          <p className="mt-4 text-sm text-slate-500 italic">
+            Pick a farm on the left, or click <em>One-click demo farm</em>.
+          </p>
+        ) : (
+          <div className="mt-4 flex gap-2 items-end flex-wrap">
+            <label className="text-xs text-slate-400 flex-1 space-y-1 block min-w-[200px]">
+              <span className="label">Preferred crop (optional)</span>
+              <input className="input"
+                     placeholder="e.g. wheat, maize, soybean, onion"
                      value={crop}
                      onChange={e => setCrop(e.target.value)} />
             </label>
-            <button onClick={ask} disabled={busy}
-                    className="rounded-lg bg-leaf-600 hover:bg-leaf-700 text-white
-                               font-medium px-4 py-2 disabled:opacity-50">
-              {busy ? "Planning…" : "Plan my season"}
+            <button onClick={ask} disabled={busy} className="btn-primary">
+              {busy ? <span className="flex items-center gap-2"><Spinner /> Planning…</span>
+                    : <>▶ Plan my season</>}
             </button>
           </div>
+        )}
 
-          {error && <p className="text-sm text-red-600">{error}</p>}
+        {error && <p className="text-sm text-red-300 mt-3 break-all">{error}</p>}
+      </div>
 
-          {rec && (
-            <div className="space-y-3 pt-2">
-              <div className="flex items-center justify-between text-xs text-slate-500">
-                <span>rec id: <code>{rec.id}</code></span>
-                <span>
-                  confidence:&nbsp;
-                  <span className="font-semibold text-emerald-700">
-                    {(rec.confidenceScore * 100).toFixed(0)}%
-                  </span>
-                </span>
+      {(busy || rec || error) && (
+        <div className="grid md:grid-cols-2 gap-4">
+          <div className="space-y-4">
+            <AgentTrace running={busy} finished={!!rec} errored={!!error} />
+            {farm && <FarmMap lat={farm.latitude} lon={farm.longitude} />}
+          </div>
+
+          <div className="card p-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="font-semibold text-slate-100">Result</h3>
+                {parsed.crop && (
+                  <div className="text-xs text-emerald-300 font-semibold uppercase tracking-wider mt-0.5">
+                    Recommended crop · {parsed.crop}
+                  </div>
+                )}
               </div>
-
-              {parsed.advice && (
-                <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-3">
-                  <p className="text-sm whitespace-pre-line">{parsed.advice}</p>
-                </div>
-              )}
-
-              {Array.isArray(parsed.tasks) && parsed.tasks.length > 0 && (
-                <ol className="list-decimal list-inside space-y-1 text-sm">
-                  {parsed.tasks.map((t, i) => {
-                    if (typeof t === "string") return <li key={i}>{t}</li>;
-                    return (
-                      <li key={i}>
-                        <span className="font-medium">
-                          {t.day ? `Day ${t.day}: ` : ""}{t.action}
-                        </span>
-                        {t.why && <span className="text-slate-500"> — {t.why}</span>}
-                      </li>
-                    );
-                  })}
-                </ol>
-              )}
-
-              {rec.traceId && (
-                <p className="text-[11px] text-slate-400">
-                  trace: <code>{rec.traceId}</code>
-                </p>
-              )}
+              <ConfidenceRing value={conf} />
             </div>
-          )}
-        </>
+
+            {rec ? (
+              <>
+                <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+                  <Metric k="Latency" v={latencyMs ? `${latencyMs}ms` : "—"} />
+                  <Metric k="Model"   v="gemini-2.5-flash" />
+                  <Metric k="Tools"   v="5" />
+                </div>
+
+                {parsed.impact && <div className="mt-4"><ImpactDashboard impact={parsed.impact} /></div>}
+
+                {parsed.advice && (
+                  <div className="mt-4">
+                    <div className="label mb-1">Advice</div>
+                    <p className="text-sm text-slate-200 leading-relaxed whitespace-pre-line">
+                      {parsed.advice}
+                    </p>
+                  </div>
+                )}
+
+                {Array.isArray(parsed.tasks) && parsed.tasks.length > 0 && (
+                  <div className="mt-4">
+                    <div className="label mb-2">Action plan</div>
+                    <ol className="space-y-2">
+                      {parsed.tasks.map((t, i) => (
+                        <li key={i} className="rounded-lg border border-white/5 bg-white/[0.02] p-2.5">
+                          <div className="flex gap-2">
+                            <span className="grid place-items-center h-6 w-6 rounded-md
+                                             bg-emerald-400/15 text-emerald-300 text-xs font-bold">
+                              {i + 1}
+                            </span>
+                            <div className="text-sm text-slate-200">
+                              {typeof t === "string" ? t : (
+                                <>
+                                  <span className="font-medium">
+                                    {t.day ? `Day ${t.day}: ` : ""}{t.action}
+                                  </span>
+                                  {t.why && <span className="text-slate-400"> — {t.why}</span>}
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        </li>
+                      ))}
+                    </ol>
+                  </div>
+                )}
+
+                {Array.isArray(parsed.risks) && parsed.risks.length > 0 && (
+                  <div className="mt-4">
+                    <div className="label mb-1.5">Top risks</div>
+                    <ul className="space-y-1">
+                      {parsed.risks.map((r, i) => (
+                        <li key={i} className="text-xs text-amber-200/90 flex gap-1.5">
+                          <span>⚠️</span><span>{r}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                <div className="mt-4 pt-3 border-t border-white/5 flex items-center justify-between text-[11px] text-slate-500">
+                  <span>rec id <code className="text-slate-400">{rec.id.slice(0, 12)}…</code></span>
+                  {rec.traceId && <span>trace <code className="text-slate-400">{rec.traceId.slice(0, 16)}…</code></span>}
+                </div>
+              </>
+            ) : (
+              <div className="mt-3 space-y-2">
+                <Skeleton h="h-4 w-2/3" />
+                <Skeleton h="h-4 w-full" />
+                <Skeleton h="h-4 w-5/6" />
+                <Skeleton h="h-4 w-1/2" />
+              </div>
+            )}
+          </div>
+        </div>
       )}
     </div>
   );
 }
 
+function Metric({ k, v }: { k: string; v: string }) {
+  return (
+    <div className="rounded-lg border border-white/5 bg-white/[0.03] py-2">
+      <div className="text-[10px] uppercase tracking-wider text-slate-500">{k}</div>
+      <div className="text-sm font-semibold text-slate-100">{v}</div>
+    </div>
+  );
+}
+
+function Skeleton({ h }: { h: string }) {
+  return <div className={`relative overflow-hidden rounded ${h} bg-white/[0.04]`} />;
+}
+
+function Spinner() {
+  return (
+    <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeOpacity="0.2" strokeWidth="3" />
+      <path d="M22 12a10 10 0 0 1-10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function ConfidenceRing({ value }: { value: number }) {
+  const pct = Math.max(0, Math.min(1, value));
+  const r = 22, c = 2 * Math.PI * r;
+  const off = c * (1 - pct);
+  return (
+    <div className="relative h-14 w-14">
+      <svg viewBox="0 0 56 56" className="h-14 w-14 -rotate-90">
+        <circle cx="28" cy="28" r={r} stroke="rgba(255,255,255,0.08)" strokeWidth="6" fill="none" />
+        <circle cx="28" cy="28" r={r} stroke="url(#g)" strokeWidth="6" fill="none"
+                strokeLinecap="round" strokeDasharray={c} strokeDashoffset={off} />
+        <defs>
+          <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stopColor="#34d399" />
+            <stop offset="100%" stopColor="#a3e635" />
+          </linearGradient>
+        </defs>
+      </svg>
+      <div className="absolute inset-0 grid place-items-center text-xs font-bold text-emerald-300">
+        {Math.round(pct * 100)}%
+      </div>
+    </div>
+  );
+}
