@@ -37,9 +37,11 @@ management:
 agriguardian:
   gemini:
     api-key: ${GEMINI_API_KEY:}
-    # gemini-3-pro = hackathon-required Gemini 3 reasoning model.
-    # gemini-3-flash is also available for lower latency / cost.
-    model: ${GEMINI_MODEL:gemini-3-pro}
+    # gemini-2.5-pro is the strongest reasoning model on the public
+    # generativelanguage.googleapis.com endpoint (Gemini 3 / 3-pro is
+    # currently Vertex-AI only). Override via GEMINI_MODEL env var if
+    # your key has access to a newer model.
+    model: ${GEMINI_MODEL:gemini-2.5-pro}
     base-url: https://generativelanguage.googleapis.com/v1beta
     stub-mode: ${GEMINI_STUB_MODE:auto}   # auto | always | never
     timeout-seconds: 30
