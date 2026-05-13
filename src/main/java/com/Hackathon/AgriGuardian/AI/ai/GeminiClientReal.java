@@ -47,6 +47,8 @@ public class GeminiClientReal implements GeminiClient {
                     ))
             );
             String path = "/models/" + cfg.getModel() + ":generateContent?key=" + cfg.getApiKey();
+            log.debug("Gemini request -> model={} baseUrl={} promptChars={}",
+                    cfg.getModel(), cfg.getBaseUrl(), prompt.length());
 
             @SuppressWarnings("unchecked")
             Map<String, Object> resp = restClient.post()
@@ -55,7 +57,14 @@ public class GeminiClientReal implements GeminiClient {
                     .retrieve()
                     .body(Map.class);
 
-            return extractText(resp);
+            String text = extractText(resp);
+            if (text == null || text.isBlank()) {
+                log.warn("Gemini returned empty text. Raw response keys={}",
+                        resp == null ? "null" : resp.keySet());
+            } else {
+                log.debug("Gemini response chars={}", text.length());
+            }
+            return text;
         } catch (RestClientResponseException http) {
             // Log the full response body so model-not-found / quota / auth errors are visible.
             String body = http.getResponseBodyAsString();
@@ -82,7 +91,16 @@ public class GeminiClientReal implements GeminiClient {
         if (content == null) return "";
         List<Map<String, Object>> parts = (List<Map<String, Object>>) content.get("parts");
         if (parts == null || parts.isEmpty()) return "";
-        return String.valueOf(parts.get(0).getOrDefault("text", ""));
+        String text = String.valueOf(parts.get(0).getOrDefault("text", "")).trim();
+        // Gemini often wraps JSON in ```json ... ``` fences. Strip them so
+        // downstream JSON parsers get clean input.
+        if (text.startsWith("```")) {
+            int firstNl = text.indexOf('\n');
+            if (firstNl > 0) text = text.substring(firstNl + 1);
+            if (text.endsWith("```")) text = text.substring(0, text.length() - 3);
+            text = text.trim();
+        }
+        return text;
     }
 }
 
