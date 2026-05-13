@@ -1,6 +1,10 @@
 spring:
   application:
     name: agriguardian-ai
+  # Auto-import local dev secrets (Mongo Atlas URI, Gemini key) when present.
+  # The file is git-ignored, so this is safe in CI / prod where it won't exist.
+  config:
+    import: optional:file:./secrets/application-secrets.properties
   data:
     mongodb:
       uri: ${MONGODB_URI:mongodb://localhost:27017/agriguardian}
