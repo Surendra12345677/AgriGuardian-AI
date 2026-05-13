@@ -31,11 +31,8 @@ management:
     tags:
       application: agriguardian-ai
 
-springdoc:
-  api-docs:
-    path: /v3/api-docs
-  swagger-ui:
-    path: /swagger-ui.html
+# springdoc removed: incompatible with Spring Boot 4 / Spring 7.
+# See note in build.gradle.
 
 agriguardian:
   gemini:
