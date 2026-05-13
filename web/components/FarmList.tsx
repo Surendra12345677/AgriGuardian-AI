@@ -23,7 +23,7 @@ export default function FarmList({
     return (
       <div className="rounded-lg border border-dashed border-white/10 bg-white/[0.02]
                       p-4 text-center text-sm text-slate-400">
-        No farms yet. Onboard one above or click the demo button.
+        No farms yet. Fill in the form above to onboard your first one.
       </div>
     );
   }

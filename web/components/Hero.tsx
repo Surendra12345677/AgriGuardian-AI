@@ -1,6 +1,6 @@
 "use client";
 
-export default function Hero({ onTryDemo }: { onTryDemo: () => void }) {
+export default function Hero() {
   return (
     <section className="relative overflow-hidden rounded-3xl border border-white/5
                         bg-gradient-to-b from-[#070b12] to-[#05080d] p-7 md:p-14">
@@ -36,9 +36,9 @@ export default function Hero({ onTryDemo }: { onTryDemo: () => void }) {
           </p>
 
           <div className="mt-7 flex flex-wrap gap-3">
-            <button onClick={onTryDemo} className="btn-primary !px-5 !py-3 text-base">
-              ▶ Run the agent on a demo farm
-            </button>
+            <a href="#onboard" className="btn-primary !px-5 !py-3 text-base">
+              🌾 Onboard your farm
+            </a>
             <a href="#how" className="btn-ghost !px-5 !py-3 text-base">
               See how it works
             </a>

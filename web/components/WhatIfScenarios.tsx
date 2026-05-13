@@ -71,16 +71,14 @@ export default function WhatIfScenarios({
             if (!parsed.advice) parsed.advice = raw.slice(0, 240);
           }
         }
-        // Per-scenario curated fallback so the UI always tells a story.
-        const fb = SCENARIO_FALLBACKS[s.key];
         out.push({
           scenario: s.key,
-          advice:     parsed.advice    || fb.advice,
-          confidence: parsed.confidence ?? rec.confidenceScore ?? fb.confidence,
-          impact:     parsed.impact    || fb.impact,
-          crop:       parsed.crop      || fb.crop,
+          advice:     parsed.advice    ?? "(no advice returned by the model)",
+          confidence: parsed.confidence ?? rec.confidenceScore ?? 0,
+          impact:     parsed.impact    ?? null,
+          crop:       parsed.crop      ?? "—",
         });
-        setResults([...out]); // progressive render
+        setResults([...out]);
       }
     } catch (err: any) {
       setError(err.message);
