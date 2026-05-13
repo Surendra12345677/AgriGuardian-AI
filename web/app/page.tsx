@@ -5,12 +5,19 @@ import { api, type Farm } from "@/lib/api";
 import FarmForm from "@/components/FarmForm";
 import FarmList from "@/components/FarmList";
 import AgentPanel from "@/components/AgentPanel";
+import Hero from "@/components/Hero";
+import PartnerStrip from "@/components/PartnerStrip";
+import HowItWorks from "@/components/HowItWorks";
+import WhatIfScenarios from "@/components/WhatIfScenarios";
+import PlantDoctor from "@/components/PlantDoctor";
+import type { Lang } from "@/components/LanguageSelector";
 
 export default function HomePage() {
   const [farms, setFarms]     = useState<Farm[]>([]);
   const [selected, setSelect] = useState<Farm | undefined>();
   const [loading, setLoading] = useState(true);
   const [bootError, setBoot]  = useState<string | null>(null);
+  const [lang, setLang]       = useState<Lang>("en");
 
   async function refresh() {
     setLoading(true);
@@ -25,60 +32,120 @@ export default function HomePage() {
     }
   }
 
+  async function loadDemoFarm() {
+    try {
+      const created = await api.createFarm({
+        farmerName: "Demo Farmer",
+        contact: "+91-99999-00000",
+        latitude: 28.61,
+        longitude: 77.20,
+        landSizeAcres: 2.5,
+        waterAvailability: "MEDIUM",
+        soilType: "LOAM",
+        budgetInr: 60000,
+      });
+      setFarms(prev => [created, ...prev]);
+      setSelect(created);
+      document.getElementById("demo")?.scrollIntoView({ behavior: "smooth" });
+    } catch (err: any) {
+      setBoot(err.message);
+    }
+  }
+
   useEffect(() => { refresh(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <div className="space-y-6">
-      <section className="rounded-2xl bg-gradient-to-r from-emerald-600 to-emerald-700
-                          text-white p-6 shadow-lg">
-        <h1 className="text-2xl md:text-3xl font-bold leading-tight">
-          An agent that plans the season — and learns from its own past runs.
-        </h1>
-        <p className="mt-2 text-emerald-50 max-w-3xl text-sm md:text-base">
-          AgriGuardian uses Gemini 3 on Google Cloud Agent Builder, retrieves
-          similar past evaluations through the <strong>Arize MCP</strong> server, then
-          persists the plan to MongoDB — under your approval.
-        </p>
-      </section>
+    <div className="space-y-12">
+      <Hero onTryDemo={loadDemoFarm} />
+      <PartnerStrip />
 
       {bootError && (() => {
         const msg = bootError.toLowerCase();
         const isDbDown =
           msg.includes("500") || msg.includes("mongo") ||
           msg.includes("timeout") || msg.includes("connection refused");
-        return isDbDown ? (
-          <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm
-                          text-amber-800">
-            <strong>MongoDB is not connected yet.</strong> The agent and tool endpoints
-            still work — only farm persistence is disabled. Start MongoDB with{" "}
-            <code>docker compose up -d mongo</code> or set{" "}
-            <code>SPRING_DATA_MONGODB_URI</code> to a MongoDB Atlas cluster, then refresh.
-          </div>
-        ) : (
-          <div className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm
-                          text-red-700">
-            Could not reach the backend ({bootError}). Make sure the Spring Boot app is
-            running on <code>localhost:8080</code> (or set <code>BACKEND_URL</code>).
+        return (
+          <div className={`card px-4 py-3 text-sm ${isDbDown ? "border-amber-400/30" : "border-red-400/30"}`}>
+            {isDbDown ? (
+              <>
+                <strong className="text-amber-300">MongoDB is not connected.</strong>
+                {" "}Agent + tool endpoints still work. Start MongoDB or set <code>SPRING_DATA_MONGODB_URI</code> to an Atlas cluster.
+              </>
+            ) : (
+              <>
+                <strong className="text-red-300">Backend unreachable</strong>{" "}({bootError}).
+                Ensure Spring Boot is running on <code>localhost:8080</code>.
+              </>
+            )}
           </div>
         );
       })()}
 
-      <div className="grid md:grid-cols-3 gap-6">
-        <div className="md:col-span-1 space-y-6">
-          <FarmForm onCreated={f => { setFarms(prev => [f, ...prev]); setSelect(f); }} />
+      <HowItWorks />
 
-          <div className="bg-white/80 rounded-xl shadow-sm border border-emerald-100 p-5">
-            <h2 className="font-semibold text-emerald-800 text-lg mb-2">Your farms</h2>
-            <FarmList farms={farms} selectedId={selected?.id}
-                      onSelect={setSelect} loading={loading} />
+      <section id="demo" className="scroll-mt-20 space-y-4">
+        <div className="flex items-end justify-between flex-wrap gap-3">
+          <div>
+            <div className="label">Live demo</div>
+            <h2 className="text-2xl md:text-3xl font-bold text-slate-100">
+              Plan a season — get a real ₹ impact estimate
+            </h2>
+            <p className="text-slate-400 text-sm mt-1 max-w-2xl">
+              The agent calls Weather → Soil → Market → Mongo, then reasons with Gemini in your language and emits
+              a season plan with concrete revenue, yield and water projections.
+            </p>
+          </div>
+          <button onClick={loadDemoFarm} className="btn-ghost text-sm">
+            ⚡ One-click demo farm
+          </button>
+        </div>
+
+        <div className="grid lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-1 space-y-6">
+            <FarmForm onCreated={f => { setFarms(prev => [f, ...prev]); setSelect(f); }} />
+            <div className="card p-5">
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="font-semibold text-slate-100">Your farms</h2>
+                <span className="chip">{farms.length}</span>
+              </div>
+              <FarmList farms={farms} selectedId={selected?.id}
+                        onSelect={setSelect} loading={loading} />
+            </div>
+          </div>
+
+          <div className="lg:col-span-2">
+            <AgentPanel farm={selected} language={lang} onLanguageChange={setLang} />
           </div>
         </div>
+      </section>
 
-        <div className="md:col-span-2">
-          <AgentPanel farm={selected} />
+      <section id="scenarios" className="scroll-mt-20 space-y-3">
+        <div>
+          <div className="label">What-if simulator</div>
+          <h2 className="text-2xl md:text-3xl font-bold text-slate-100">
+            Will the plan survive a drought? A price crash?
+          </h2>
+          <p className="text-slate-400 text-sm mt-1 max-w-2xl">
+            The agent re-runs the entire planning loop under 4 stress scenarios so the farmer
+            adopts a plan that's robust — not just optimistic.
+          </p>
         </div>
-      </div>
+        <WhatIfScenarios farm={selected} language={lang} />
+      </section>
+
+      <section id="doctor" className="scroll-mt-20 space-y-3">
+        <div>
+          <div className="label">Plant Doctor</div>
+          <h2 className="text-2xl md:text-3xl font-bold text-slate-100">
+            Sick crop? Get a diagnosis in seconds — in your language.
+          </h2>
+          <p className="text-slate-400 text-sm mt-1 max-w-2xl">
+            Describe the symptoms; Gemini matches the most likely disease or pest, ranks
+            treatments by cost, and tells the farmer how to prevent it next season.
+          </p>
+        </div>
+        <PlantDoctor language={lang} />
+      </section>
     </div>
   );
 }
-

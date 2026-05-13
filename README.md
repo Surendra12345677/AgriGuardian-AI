@@ -201,7 +201,6 @@ docs/               HACKATHON_PLAN.md (start here)                      (done)
 - **Brain:** Gemini 3 (`gemini-3-pro`) via Google Cloud Agent Builder
 - **Agent spec:** [`agent-builder/agriguardian-agent.yaml`](./agent-builder/agriguardian-agent.yaml)
 - **Self-aware loop:** every run is exported as a trace to Arize AX (OTLP); the agent then queries those traces via Arize MCP on the next run — closing the observe→learn loop
-- **Criteria mapping:** see [`docs/HACKATHON_PLAN.md`](./docs/HACKATHON_PLAN.md) §2
 
 ## 🗺️ Roadmap
 

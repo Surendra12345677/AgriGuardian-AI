@@ -26,11 +26,21 @@ export type Recommendation = {
   createdAt: string;
 };
 
+export type Scenario = "BASELINE" | "DROUGHT" | "PRICE_CRASH" | "PEST_OUTBREAK";
+
+export type DiagnoseRequest = {
+  crop: string;
+  symptoms: string;
+  language?: string;
+};
+
+export type DiagnoseResponse = { raw: string };
+
 async function http<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, {
     ...init,
     headers: { "Content-Type": "application/json", ...(init?.headers || {}) },
-    cache: "no-store"
+    cache: "no-store",
   });
   if (!res.ok) {
     const body = await res.text();
@@ -44,10 +54,18 @@ export const api = {
   createFarm: (f: Omit<Farm, "id" | "createdAt" | "chosenCrop">) =>
     http<Farm>("/api/v1/farms", { method: "POST", body: JSON.stringify(f) }),
   recommend:  (req: {
-    farmId: string; latitude: number; longitude: number; preferredCrop?: string;
+    farmId: string;
+    latitude: number;
+    longitude: number;
+    preferredCrop?: string;
+    language?: string;
+    scenario?: Scenario;
   }) =>
     http<Recommendation>("/api/v1/recommendations", {
-      method: "POST", body: JSON.stringify(req)
-    })
+      method: "POST", body: JSON.stringify(req),
+    }),
+  diagnose: (req: DiagnoseRequest) =>
+    http<DiagnoseResponse>("/api/v1/diagnose", {
+      method: "POST", body: JSON.stringify(req),
+    }),
 };
-

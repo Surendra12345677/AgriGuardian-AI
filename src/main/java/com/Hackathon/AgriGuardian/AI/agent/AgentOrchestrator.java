@@ -86,12 +86,41 @@ public class AgentOrchestrator {
             // ── generate ────────────────────────────────────────────────────
             Map<String, Object> ctx = new LinkedHashMap<>(toolOutputs);
             ctx.put("preferredCrop", req.preferredCrop());
-            String advice = gemini.generate(
-                    "You are AgriGuardian, a careful agronomy advisor. Reply as compact JSON " +
-                            "with keys: advice (string), tasks (string[]), confidence (0..1).",
-                    "Recommend the best crop plan for farm " + req.farmId(),
-                    ctx
-            );
+            ctx.put("scenario", req.scenario() == null ? "BASELINE" : req.scenario());
+
+            String lang = (req.language() == null || req.language().isBlank()) ? "en" : req.language();
+            String langName = switch (lang) {
+                case "hi" -> "Hindi (Devanagari)";
+                case "mr" -> "Marathi (Devanagari)";
+                case "ta" -> "Tamil";
+                case "te" -> "Telugu";
+                case "bn" -> "Bengali";
+                case "pa" -> "Punjabi";
+                default -> "English";
+            };
+
+            String systemPrompt = """
+                    You are AgriGuardian, a careful agronomy advisor for smallholder Indian farmers.
+                    Produce a SEASON PLAN that maximises farmer income while respecting water and soil limits.
+                    Reply ONLY as compact valid JSON (no markdown fences) with EXACTLY these keys:
+                      "advice"     : string, 2-3 sentences in %s
+                      "crop"       : string, the recommended crop
+                      "tasks"      : array of {"day": int, "action": string, "why": string}
+                      "confidence" : float between 0 and 1
+                      "impact"     : { "expectedRevenueInr": int, "extraIncomeInr": int,
+                                       "yieldDeltaPct": int, "waterSavingsPct": int,
+                                       "costInr": int, "paybackWeeks": int }
+                      "risks"      : array of strings (top 3 risks for this scenario)
+                    Apply scenario stress-tests: if scenario is DROUGHT, prefer drought-tolerant crops and
+                    drip irrigation; PRICE_CRASH → diversify; PEST_OUTBREAK → resistant varieties + IPM.
+                    """.formatted(langName);
+
+            String userPrompt = "Farm " + req.farmId() +
+                    " | scenario=" + (req.scenario() == null ? "BASELINE" : req.scenario()) +
+                    " | preferredCrop=" + (req.preferredCrop() == null ? "(none)" : req.preferredCrop()) +
+                    " | language=" + langName;
+
+            String advice = gemini.generate(systemPrompt, userPrompt, ctx);
 
             // ── reflect ─────────────────────────────────────────────────────
             String reflected;

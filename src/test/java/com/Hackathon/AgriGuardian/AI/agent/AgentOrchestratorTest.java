@@ -49,7 +49,7 @@ class AgentOrchestratorTest {
 
     @Test
     void run_invokesAllToolsThenGeneratesAndPersists() {
-        var req = new RecommendationRequest("farm-1", 18.5, 73.8, "maize");
+        var req = new RecommendationRequest("farm-1", 18.5, 73.8, "maize", "en", "BASELINE");
 
         Recommendation result = orchestrator.run(req);
 
