@@ -12,12 +12,15 @@ import WhatIfScenarios from "@/components/WhatIfScenarios";
 import PlantDoctor from "@/components/PlantDoctor";
 import type { Lang } from "@/components/LanguageSelector";
 
+type WorkspaceTab = "plan" | "scenarios" | "doctor";
+
 export default function HomePage() {
   const [farms, setFarms]     = useState<Farm[]>([]);
   const [selected, setSelect] = useState<Farm | undefined>();
   const [loading, setLoading] = useState(true);
   const [bootError, setBoot]  = useState<string | null>(null);
   const [lang, setLang]       = useState<Lang>("en");
+  const [tab,  setTab]        = useState<WorkspaceTab>("plan");
 
   async function refresh() {
     setLoading(true);
@@ -46,7 +49,8 @@ export default function HomePage() {
       });
       setFarms(prev => [created, ...prev]);
       setSelect(created);
-      document.getElementById("demo")?.scrollIntoView({ behavior: "smooth" });
+      setTab("plan");
+      document.getElementById("workspace")?.scrollIntoView({ behavior: "smooth" });
     } catch (err: any) {
       setBoot(err.message);
     }
@@ -54,10 +58,24 @@ export default function HomePage() {
 
   useEffect(() => { refresh(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Listen for tab-switch requests from the Navbar.
+  useEffect(() => {
+    const handler = (e: any) => {
+      const next = e.detail as WorkspaceTab;
+      if (next === "plan" || next === "scenarios" || next === "doctor") setTab(next);
+    };
+    window.addEventListener("ag:tab", handler);
+    return () => window.removeEventListener("ag:tab", handler);
+  }, []);
+
+  // Broadcast tab changes so the Navbar can highlight the active sub-tab.
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent("ag:tab-changed", { detail: tab }));
+  }, [tab]);
+
   return (
-    <div className="space-y-12">
+    <div className="space-y-16">
       <Hero onTryDemo={loadDemoFarm} />
-      <PartnerStrip />
 
       {bootError && (() => {
         const msg = bootError.toLowerCase();
@@ -83,69 +101,130 @@ export default function HomePage() {
 
       <HowItWorks />
 
-      <section id="demo" className="scroll-mt-20 space-y-4">
-        <div className="flex items-end justify-between flex-wrap gap-3">
-          <div>
-            <div className="label">Live demo</div>
-            <h2 className="text-2xl md:text-3xl font-bold text-slate-100">
-              Plan a season — get a real ₹ impact estimate
-            </h2>
-            <p className="text-slate-400 text-sm mt-1 max-w-2xl">
-              The agent calls Weather → Soil → Market → Mongo, then reasons with Gemini in your language and emits
-              a season plan with concrete revenue, yield and water projections.
-            </p>
-          </div>
-          <button onClick={loadDemoFarm} className="btn-ghost text-sm">
-            ⚡ One-click demo farm
-          </button>
-        </div>
+      {/* ── Unified workspace ──────────────────────────────────────────── */}
+      <section id="workspace" className="scroll-mt-20 space-y-5">
+        <SectionHeader
+          eyebrow="Live workspace"
+          title={<>Pick a farm. Then plan, stress-test, or diagnose.</>}
+          sub="One workspace, three modes. The selected farm is shared across the agent, the what-if simulator, and the plant doctor."
+          action={
+            <button onClick={loadDemoFarm} className="btn-ghost text-sm">
+              ⚡ One-click demo farm
+            </button>
+          }
+        />
 
         <div className="grid lg:grid-cols-3 gap-6">
+          {/* LEFT: farm picker */}
           <div className="lg:col-span-1 space-y-6">
-            <FarmForm onCreated={f => { setFarms(prev => [f, ...prev]); setSelect(f); }} />
+            <FarmForm onCreated={f => { setFarms(prev => [f, ...prev]); setSelect(f); setTab("plan"); }} />
             <div className="card p-5">
               <div className="flex items-center justify-between mb-3">
                 <h2 className="font-semibold text-slate-100">Your farms</h2>
                 <span className="chip">{farms.length}</span>
               </div>
               <FarmList farms={farms} selectedId={selected?.id}
-                        onSelect={setSelect} loading={loading} />
+                        onSelect={f => { setSelect(f); }} loading={loading} />
             </div>
           </div>
 
-          <div className="lg:col-span-2">
-            <AgentPanel farm={selected} language={lang} onLanguageChange={setLang} />
+          {/* RIGHT: tabbed workspace */}
+          <div className="lg:col-span-2 space-y-4">
+            <WorkspaceTabs tab={tab} setTab={setTab} hasFarm={!!selected} />
+
+            {tab === "plan"      && <AgentPanel       farm={selected} language={lang} onLanguageChange={setLang} />}
+            {tab === "scenarios" && <WhatIfScenarios  farm={selected} language={lang} />}
+            {tab === "doctor"    && <PlantDoctor      language={lang} />}
           </div>
         </div>
       </section>
 
-      <section id="scenarios" className="scroll-mt-20 space-y-3">
-        <div>
-          <div className="label">What-if simulator</div>
-          <h2 className="text-2xl md:text-3xl font-bold text-slate-100">
-            Will the plan survive a drought? A price crash?
-          </h2>
-          <p className="text-slate-400 text-sm mt-1 max-w-2xl">
-            The agent re-runs the entire planning loop under 4 stress scenarios so the farmer
-            adopts a plan that's robust — not just optimistic.
-          </p>
-        </div>
-        <WhatIfScenarios farm={selected} language={lang} />
-      </section>
-
-      <section id="doctor" className="scroll-mt-20 space-y-3">
-        <div>
-          <div className="label">Plant Doctor</div>
-          <h2 className="text-2xl md:text-3xl font-bold text-slate-100">
-            Sick crop? Get a diagnosis in seconds — in your language.
-          </h2>
-          <p className="text-slate-400 text-sm mt-1 max-w-2xl">
-            Describe the symptoms; Gemini matches the most likely disease or pest, ranks
-            treatments by cost, and tells the farmer how to prevent it next season.
-          </p>
-        </div>
-        <PlantDoctor language={lang} />
+      <section id="stack" className="scroll-mt-20 space-y-4">
+        <SectionHeader
+          eyebrow="Stack"
+          title={<>Production-grade plumbing, in the box.</>}
+          sub="Every component is observable end-to-end via OpenTelemetry. No vendor lock-in: swap models or stores at the boundary."
+        />
+        <div className="-mt-2"><PartnerStrip /></div>
       </section>
     </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────────────── */
+
+function WorkspaceTabs({
+  tab, setTab, hasFarm,
+}: {
+  tab: WorkspaceTab;
+  setTab: (t: WorkspaceTab) => void;
+  hasFarm: boolean;
+}) {
+  const items: { key: WorkspaceTab; label: string; icon: string; sub: string; needsFarm: boolean }[] = [
+    { key: "plan",      icon: "🤖", label: "Plan a season",   sub: "Agent loop",            needsFarm: true },
+    { key: "scenarios", icon: "🧪", label: "What-if",          sub: "4 stress tests",        needsFarm: true },
+    { key: "doctor",    icon: "🩺", label: "Plant Doctor",     sub: "Diagnose symptoms",     needsFarm: false },
+  ];
+  return (
+    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-1.5 grid grid-cols-3 gap-1.5">
+      {items.map(it => {
+        const active = tab === it.key;
+        const disabled = it.needsFarm && !hasFarm;
+        return (
+          <button key={it.key}
+                  disabled={disabled}
+                  onClick={() => setTab(it.key)}
+                  className={
+                    "rounded-xl px-3 py-2.5 text-left transition relative " +
+                    (active
+                      ? "bg-emerald-400/[0.10] border border-emerald-400/40 shadow-inner shadow-emerald-500/10"
+                      : "border border-transparent hover:bg-white/[0.04]") +
+                    (disabled ? " opacity-40 cursor-not-allowed" : "")
+                  }
+                  title={disabled ? "Pick or onboard a farm first" : undefined}>
+            <div className="flex items-center gap-2">
+              <span className="text-base">{it.icon}</span>
+              <span className={"text-sm font-semibold " + (active ? "text-emerald-100" : "text-slate-200")}>
+                {it.label}
+              </span>
+            </div>
+            <div className="text-[10px] uppercase tracking-wider text-slate-500 mt-0.5 ml-7">
+              {it.sub}
+            </div>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function SectionHeader({ id, eyebrow, title, sub, action }: {
+  id?: string;
+  eyebrow: string;
+  title: React.ReactNode;
+  sub?: string;
+  action?: React.ReactNode;
+}) {
+  return (
+    <section id={id} className="scroll-mt-20">
+      <div className="flex items-end justify-between flex-wrap gap-3">
+        <div className="max-w-3xl">
+          <div className="inline-flex items-center gap-2 text-[10px] uppercase tracking-[0.18em]
+                          text-emerald-300/90 font-semibold">
+            <span className="h-px w-6 bg-emerald-400/50" />
+            {eyebrow}
+          </div>
+          <h2 className="mt-2 text-3xl md:text-4xl font-bold text-slate-100 tracking-tight">
+            {title}
+          </h2>
+          {sub && (
+            <p className="text-slate-400 text-sm md:text-base mt-2 leading-relaxed">
+              {sub}
+            </p>
+          )}
+        </div>
+        {action}
+      </div>
+    </section>
   );
 }

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { api, type Farm } from "@/lib/api";
+import LocationPicker from "./LocationPicker";
 
 const WATER = ["LOW", "MEDIUM", "HIGH"] as const;
 const SOIL  = ["LOAM", "CLAY", "SANDY", "BLACK", "RED"] as const;
@@ -28,6 +29,10 @@ export default function FarmForm({ onCreated }: { onCreated: (f: Farm) => void }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    if (!form.farmerName.trim()) {
+      setError("Farmer name is required.");
+      return;
+    }
     setBusy(true); setError(null);
     try {
       const created = await api.createFarm(form);
@@ -46,14 +51,16 @@ export default function FarmForm({ onCreated }: { onCreated: (f: Farm) => void }
       <button onClick={() => setOpen(o => !o)}
               className="w-full flex items-center justify-between text-left">
         <div>
-          <h2 className="font-semibold text-slate-100">Onboard a farm</h2>
-          <p className="text-xs text-slate-400">Create a record the agent can plan against.</p>
+          <h2 className="font-semibold text-slate-100 flex items-center gap-2">
+            <span aria-hidden>🌾</span> Onboard a farm
+          </h2>
+          <p className="text-xs text-slate-400">Pick a location, set soil/water/budget.</p>
         </div>
         <span className="chip">{open ? "−" : "+"}</span>
       </button>
 
       {open && (
-        <form onSubmit={submit} className="mt-4 space-y-3">
+        <form onSubmit={submit} className="mt-4 space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <Field label="Farmer name" required>
               <input className="input" value={form.farmerName}
@@ -63,14 +70,19 @@ export default function FarmForm({ onCreated }: { onCreated: (f: Farm) => void }
               <input className="input" value={form.contact}
                      onChange={e => set("contact", e.target.value)} />
             </Field>
-            <Field label="Latitude">
-              <input className="input" type="number" step="0.0001" value={form.latitude}
-                     onChange={e => set("latitude", Number(e.target.value))} />
-            </Field>
-            <Field label="Longitude">
-              <input className="input" type="number" step="0.0001" value={form.longitude}
-                     onChange={e => set("longitude", Number(e.target.value))} />
-            </Field>
+          </div>
+
+          <div>
+            <span className="label">Field location</span>
+            <div className="mt-1.5">
+              <LocationPicker
+                value={{ lat: form.latitude, lon: form.longitude }}
+                onChange={p => { set("latitude", p.lat); set("longitude", p.lon); }}
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
             <Field label="Land (acres)">
               <input className="input" type="number" step="0.1" value={form.landSizeAcres}
                      onChange={e => set("landSizeAcres", Number(e.target.value))} />

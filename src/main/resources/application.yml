@@ -37,11 +37,11 @@ management:
 agriguardian:
   gemini:
     api-key: ${GEMINI_API_KEY:}
-    # gemini-2.5-pro is the strongest reasoning model on the public
-    # generativelanguage.googleapis.com endpoint (Gemini 3 / 3-pro is
-    # currently Vertex-AI only). Override via GEMINI_MODEL env var if
-    # your key has access to a newer model.
-    model: ${GEMINI_MODEL:gemini-2.5-pro}
+    # gemini-2.5-flash is fast, cheap, and supports JSON-mode + thinking-off.
+    # Override via GEMINI_MODEL env var (e.g. gemini-2.5-pro for stronger
+    # reasoning — note Pro requires a tighter thinkingBudget cap to avoid
+    # blank responses on complex prompts).
+    model: ${GEMINI_MODEL:gemini-2.5-flash}
     base-url: https://generativelanguage.googleapis.com/v1beta
     stub-mode: ${GEMINI_STUB_MODE:auto}   # auto | always | never
     timeout-seconds: 30
