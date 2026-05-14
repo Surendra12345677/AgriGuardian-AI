@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import Navbar from "@/components/Navbar";
+import NumberInputGuards from "@/components/NumberInputGuards";
 
 export const metadata: Metadata = {
   title: "AgriGuardian AI · Agentic farm advisor",
@@ -13,6 +14,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en">
       <body>
         <div id="top" />
+        <NumberInputGuards />
         <Navbar />
         <main className="mx-auto w-full max-w-[1760px] 2xl:max-w-[2100px] 3xl:max-w-[2560px] px-5 lg:px-8 xl:px-12 2xl:px-16 py-8">{children}</main>
 
