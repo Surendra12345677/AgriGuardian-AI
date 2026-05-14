@@ -7,7 +7,8 @@
 - **Track / partner bucket:** 🟣 **Arize**
 - **Repo (public, MIT):** https://github.com/Surendra12345677/AgriGuardian-AI
 - **Hosted demo:** **https://agriguardian-web-963977203522.us-central1.run.app**
-- **Backend Swagger:** https://agriguardian-ai-zqafbkccaa-uc.a.run.app/swagger-ui.html
+- **Backend API base:** https://agriguardian-ai-zqafbkccaa-uc.a.run.app/api/v1
+- **Backend health:** https://agriguardian-ai-zqafbkccaa-uc.a.run.app/actuator/health
 - **Demo video:** _YouTube unlisted URL goes here_
 - **Date:** May 2026
 
@@ -135,7 +136,7 @@ cd AgriGuardian-AI
 docker compose up -d --build
 # wait ~40s for the app health check, then open:
 #   http://localhost:3000                     ← demo UI
-#   http://localhost:8080/swagger-ui.html     ← API
+#   http://localhost:8080/api/v1/farms        ← REST API
 #   http://localhost:8080/actuator/health
 ```
 

@@ -60,7 +60,7 @@ google-cloud-agent-builder, gemini-3, arize, arize-mcp, mongodb, mongodb-mcp, sp
 | GitHub repo | `https://github.com/Surendra12345677/AgriGuardian-AI` |
 | Video demo | `<paste your YouTube unlisted URL here>` |
 | Documentation | `https://github.com/Surendra12345677/AgriGuardian-AI/blob/main/SUBMISSION.md` |
-| Backend Swagger (optional) | `https://agriguardian-ai-zqafbkccaa-uc.a.run.app/swagger-ui.html` |
+| Backend health (optional) | `https://agriguardian-ai-zqafbkccaa-uc.a.run.app/actuator/health` |
 
 ## 7. Test instructions (paste into "How to run / test")
 ```
@@ -70,7 +70,7 @@ cd AgriGuardian-AI
 docker compose up -d --build
 # wait ~40s, then:
 #   http://localhost:3000                  ← demo dashboard
-#   http://localhost:8080/swagger-ui.html  ← REST API
+#   http://localhost:8080/api/v1/farms     ← REST API
 #   http://localhost:8080/actuator/health  ← health probe
 
 In the UI:

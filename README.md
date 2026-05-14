@@ -17,7 +17,8 @@
 **Status:** ✅ Live on Google Cloud Run
 **Submission:** [`SUBMISSION.md`](./SUBMISSION.md) · [`DEVPOST_FORM.md`](./DEVPOST_FORM.md)
 **🌐 Live demo:** **https://agriguardian-web-963977203522.us-central1.run.app**
-**📘 Backend Swagger:** https://agriguardian-ai-zqafbkccaa-uc.a.run.app/swagger-ui.html
+**🔌 Backend API base:** https://agriguardian-ai-zqafbkccaa-uc.a.run.app/api/v1
+**❤️ Backend health:** https://agriguardian-ai-zqafbkccaa-uc.a.run.app/actuator/health
 **Demo video:** _coming soon_
 
 ---
@@ -115,7 +116,7 @@ docker compose logs -f app
 
 Then open:
 - 🌐 **Dashboard** http://localhost:3000  ← the demo UI
-- 📘 Swagger UI    http://localhost:8080/swagger-ui.html
+- 🔌 API base     http://localhost:8080/api/v1
 - ❤️ Health        http://localhost:8080/actuator/health
 
 ### Option B — Local JDK
@@ -133,7 +134,7 @@ Copy-Item .env.example .env
 ```
 
 ### Then open
-- 📘 Swagger UI: http://localhost:8080/swagger-ui.html
+- 🔌 API base: http://localhost:8080/api/v1
 - ❤️ Health:    http://localhost:8080/actuator/health
 - 📊 Metrics:   http://localhost:8080/actuator/prometheus
 
@@ -227,7 +228,7 @@ docs/               HACKATHON_PLAN.md (start here)                      (done)
 - [x] Demo seed (1 farm + 3 historical recommendations on first boot, dev profile)
 - [x] Secret-redacting Logback converter (defence-in-depth for log lines)
 - [x] Unit + MockMvc tests
-- [x] Swagger / OpenAPI UI
+- [x] Swagger / OpenAPI UI removed (incompatible with Spring Boot 4 / Spring 7 — REST endpoints documented in [`docs/HACKATHON_PLAN.md`](./docs/HACKATHON_PLAN.md) and tested in `src/test/`)
 - [x] Dockerfile + docker-compose (app + mongo + mongodb-mcp + web)
 - [x] **Next.js 15 dashboard** (onboarding form + farm list + agent panel)
 - [ ] Cloud Run deployment (blocked on GCP billing)
