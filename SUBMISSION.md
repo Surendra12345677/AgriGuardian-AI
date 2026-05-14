@@ -25,7 +25,7 @@ We additionally use **MongoDB MCP** as the agent's write-side action tool, becau
 ## 2. Devpost form — copy/paste blocks
 
 ### Tagline (max 200 chars)
-> An autonomous Gemini-3 agent that doubles smallholder-farmer income — picks the most profitable crop, plans the season in 7 Indian languages, projects ₹ impact, and self-improves via Arize MCP.
+> An autonomous Gemini-3 agent that doubles smallholder-farmer income — picks the most profitable crop, plans the season in 13 languages, projects ₹ impact, and self-improves via Arize MCP.
 
 ### Inspiration
 Smallholder farmers in India face volatile weather, unpredictable mandi prices and rising input costs, yet most "smart farming" apps give one-shot static tips that ignore future market windows, the farmer's own language, and the farmer's own history. We wanted to build an **agent**, not a chatbot — something that plans, reasons, takes action, and *learns from its own past runs*.
@@ -35,7 +35,7 @@ AgriGuardian is an autonomous farm-advisor agent that:
 
 1. **Picks the most profitable crop** for a farm given soil, weather forecast, water availability and budget.
 2. **Generates a day-by-day season plan** with concrete tasks (sowing, irrigation, pesticide windows, harvest, sell-window).
-3. **Replies in the farmer's language** — English, Hindi, Marathi, Tamil, Telugu, Bengali, Punjabi.
+3. **Replies in the farmer's language** — 13 languages out of the box: English, Hindi, Marathi, Tamil, Telugu, Bengali, Punjabi (India) plus Spanish, French, German, Italian, Portuguese, Dutch (EU smallholders).
 4. **Projects real ₹ impact** — extra income, yield Δ%, water saved %, payback weeks. No hand-wavy "this will help"; the impact dashboard shows what the farmer takes home.
 5. **Stress-tests the plan** under 4 what-if scenarios (baseline / drought / price-crash / pest outbreak) so the farmer adopts something *robust*, not optimistic.
 6. **Diagnoses sick crops** (Plant Doctor): describe the symptoms in any language, Gemini matches the most likely disease, ranks treatments by cost, prescribes prevention.
@@ -81,7 +81,7 @@ Every span is exported to Arize AX; the next request's `tool.arize.mcp` span loo
 
 ### Accomplishments we're proud of
 - A real **multi-step agent** (9 spans), not a single LLM call dressed as one.
-- **7 Indian languages** working end-to-end — language flag flows from the UI all the way through Gemini and into the impact dashboard.
+- **7 Indian languages** + **6 European languages** working end-to-end — language flag flows from the UI all the way through Gemini and into the impact dashboard.
 - A **₹-denominated impact dashboard** that turns "this might help" into "this projects +₹38k extra income, payback in 6 weeks."
 - A **what-if simulator** that re-runs the entire planner under 4 stress scenarios — judges can literally watch the plan adapt.
 - A **Plant Doctor** that diagnoses a sick crop from a text description in seconds.
@@ -112,7 +112,7 @@ Total runtime target: **2 min 50 s**. Use OBS / Loom / Quicktime. Voice-over in 
 | 1 | 0:00–0:15 | Hero of the deployed site; chips visible | *"AgriGuardian is an autonomous Gemini-3 agent built on Google Cloud Agent Builder. Its mission: double smallholder-farmer income, one season at a time. We're submitting to the Arize partner bucket."* |
 | 2 | 0:15–0:35 | Click **One-click demo farm** → farm appears in the list, the agent panel highlights | *"One click seeds a real demo farm. The agent now has a context — soil, water, lat/lon, budget."* |
 | 3 | 0:35–1:10 | Click **Plan my season**. AgentTrace pipeline lights up. Result panel populates with crop name, confidence ring, impact dashboard, action plan. | *"The agent runs nine OpenTelemetry spans — plan, Arize MCP lookup, weather, soil, market, Gemini reasoning, MongoDB MCP persist, reflect. End-to-end in roughly 2.4 seconds. Notice the impact dashboard — extra income, yield delta, water saved, payback. Real numbers, not vibes."* |
-| 4 | 1:10–1:25 | Click the **हिन्दी** language chip, click **Plan my season** again. Result re-renders in Hindi. | *"The same agent in Hindi. We support seven Indian languages — Hindi, Marathi, Tamil, Telugu, Bengali, Punjabi, English."* |
+| 4 | 1:10–1:25 | Click the **हिन्दी** language chip, click **Plan my season** again. Result re-renders in Hindi. Then click **Español** and re-plan to show the EU-language path. | *"The same agent in Hindi — and in Spanish. We support thirteen languages: seven Indian and six European, so the same agent works for an Indian smallholder and a Spanish olive farmer."* |
 | 5 | 1:25–1:55 | Scroll to **What-if scenarios**, click **Run all scenarios**. The 4 cards (Baseline / Drought / Price-crash / Pest) progressively fill in. | *"Now we stress-test the plan against four realities. The agent re-runs the full planner under each scenario so the farmer adopts something robust, not optimistic."* |
 | 6 | 1:55–2:20 | Scroll to **Plant Doctor**. Click the **wheat** sample chip → click **Diagnose**. Diagnosis card appears with treatments + prevention. | *"Plant Doctor — describe a sick crop, Gemini matches the most likely disease, ranks treatments by cost, prescribes prevention. In your language. In two seconds."* |
 | 7 | 2:20–2:45 | **Switch to Arize AX UI** in another tab. Show the trace list with `agent.run` spans. Open one, expand the `tool.arize.mcp` span. | *"Every step is shipped to Arize AX over OTLP. The next run consults these traces through Arize MCP before answering — that's the self-improvement loop, and that's why we're in the Arize bucket."* |

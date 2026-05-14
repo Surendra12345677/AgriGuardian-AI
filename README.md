@@ -13,7 +13,9 @@
 
 **Hackathon:** Google Cloud Rapid Agent Hackathon — *Building Agents for Real-World Challenges*
 **Partner track:** 🟣 **Arize** (Arize MCP + Arize AX traces)
+**Languages:** 13 — English, Hindi, Marathi, Tamil, Telugu, Bengali, Punjabi · Spanish, French, German, Italian, Portuguese, Dutch
 **Status:** 🚧 Active development — see [`docs/HACKATHON_PLAN.md`](./docs/HACKATHON_PLAN.md)
+**Submission:** [`SUBMISSION.md`](./SUBMISSION.md) · [`DEVPOST_FORM.md`](./DEVPOST_FORM.md)
 **Demo video:** _coming soon_ · **Live URL:** _pending GCP billing_
 
 ---
