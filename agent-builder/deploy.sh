@@ -33,11 +33,30 @@ if [[ ! -f "$ENV_FILE" ]]; then
   exit 1
 fi
 
-# Parse .env into the current shell (only KEY=VALUE lines, ignore comments).
-set -a
-# shellcheck disable=SC1090
-source <(grep -E '^[A-Za-z_][A-Za-z0-9_]*=' "$ENV_FILE")
-set +a
+# Parse .env safely line-by-line. We can't `source` it because values like
+# the Mongo URI contain `&` and `?` which bash would interpret as job
+# control / globs and silently truncate the variable (the bug that made
+# the first run print "MONGODB_URI is empty").
+while IFS= read -r raw || [[ -n "$raw" ]]; do
+  # strip CR (Windows line endings) + leading/trailing spaces
+  line="${raw%$'\r'}"
+  line="${line#"${line%%[![:space:]]*}"}"
+  [[ -z "$line" || "${line:0:1}" == "#" ]] && continue
+  [[ "$line" != *"="* ]] && continue
+  key="${line%%=*}"
+  val="${line#*=}"
+  # trim spaces around the key; keep the value verbatim (URLs need it)
+  key="${key// /}"
+  # strip surrounding quotes if any
+  if [[ "$val" == \"*\" || "$val" == \'*\' ]]; then
+    val="${val:1:${#val}-2}"
+  fi
+  # only accept POSIX-style env names so a stray line can't clobber PATH
+  if [[ "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+    printf -v "$key" '%s' "$val"
+    export "$key"
+  fi
+done < "$ENV_FILE"
 
 need() {
   local k="$1"
