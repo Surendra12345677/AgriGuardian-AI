@@ -27,6 +27,9 @@ WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+# Some repos don't ship a public/ folder. Next.js standalone output
+# expects one to exist (even if empty), so create it as a no-op.
+RUN mkdir -p public
 RUN npm run build
 
 ############################
