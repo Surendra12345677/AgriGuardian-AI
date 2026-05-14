@@ -81,6 +81,22 @@ public class AgentOrchestrator {
         return n;
     }
 
+    /**
+     * Drop every cached recommendation that belongs to a specific farm.
+     * Called from {@code FarmController#update} so when the user moves a
+     * pin and saves, the very next planner request always hits a fresh
+     * Gemini call instead of returning the stale "before-the-move" plan.
+     */
+    public int evictFarm(String farmId) {
+        if (farmId == null) return 0;
+        String prefix = farmId + "|";
+        int before = cache.size();
+        cache.keySet().removeIf(k -> k.startsWith(prefix));
+        int dropped = before - cache.size();
+        if (dropped > 0) log.info("Evicted {} cached rec(s) for farmId={}", dropped, farmId);
+        return dropped;
+    }
+
     public Recommendation run(RecommendationRequest req) {
         // ── cache short-circuit (saves Gemini free-tier quota during demo) ──
         // IMPORTANT: we only cache *live* Gemini results. An offline-fallback
@@ -91,10 +107,12 @@ public class AgentOrchestrator {
         boolean forceLive = Boolean.TRUE.equals(req.forceLive());
         // Include rounded lat/lon in the cache key so relocating a farm
         // (same farmId, new coordinates) does NOT return the previous
-        // recommendation. Rounded to 0.01° (~1 km) to still benefit from
-        // caching when the same farm is queried repeatedly.
-        String latKey = req.latitude()  == null ? "?" : String.format(java.util.Locale.US, "%.2f", req.latitude());
-        String lonKey = req.longitude() == null ? "?" : String.format(java.util.Locale.US, "%.2f", req.longitude());
+        // recommendation. Rounded to 0.001° (~110 m) so even small pin
+        // adjustments by the user are honoured — the previous 0.01° (~1 km)
+        // bucket was wide enough that nearby villages collided and reused
+        // each other's plan, which farmers (rightly) flagged as "wrong".
+        String latKey = req.latitude()  == null ? "?" : String.format(java.util.Locale.US, "%.3f", req.latitude());
+        String lonKey = req.longitude() == null ? "?" : String.format(java.util.Locale.US, "%.3f", req.longitude());
         String cacheKey = req.farmId() + "|"
                 + latKey + "," + lonKey + "|"
                 + (req.preferredCrop() == null ? "" : req.preferredCrop().toLowerCase()) + "|"
@@ -276,7 +294,21 @@ public class AgentOrchestrator {
             } catch (Exception ignored) { /* defaults are fine */ }
             List<String> shortlist = candidateCrops(currentMonth,
                     req.latitude() == null ? 20.0 : req.latitude(),
+                    req.longitude() == null ? 78.0 : req.longitude(),
                     rain7, soilHint, req.scenario());
+
+            // Deterministic per-coordinate "anchor" crop. Without this, the
+            // same season+soil combo (e.g. ZAID + BLACK) returns the same
+            // shortlist for every farm and Gemini consistently picks the
+            // first item — so two farms 1000 km apart get the same crop,
+            // which farmers correctly perceive as "the AI isn't actually
+            // looking at my location". Hashing lat/lon (rounded to ~1 km)
+            // into the shortlist guarantees that a meaningful pin move
+            // produces a different anchor recommendation.
+            String anchorCrop = pickAnchorCrop(shortlist,
+                    req.latitude()  == null ? 0.0 : req.latitude(),
+                    req.longitude() == null ? 0.0 : req.longitude(),
+                    currentMonth);
 
             String userPrompt = "Farm " + req.farmId() +
                     " | latitude=" + req.latitude() +
@@ -285,10 +317,12 @@ public class AgentOrchestrator {
                     " | scenario=" + (req.scenario() == null ? "BASELINE" : req.scenario()) +
                     " | preferredCrop=" + (req.preferredCrop() == null ? "(none — choose the best for this lat/lon, soil and weather)" : req.preferredCrop()) +
                     " | candidateShortlist=" + shortlist +
+                    " | locationAnchorCrop=" + anchorCrop +
                     " | language=" + langName +
                     "\nUse the weather, soil and market tool outputs in Context to ground every figure. " +
-                    "If preferredCrop is empty, pick the crop from candidateShortlist that best matches " +
-                    "this latitude band, the soil profile, and the 7-day rainfall window. " +
+                    "If preferredCrop is empty, prefer locationAnchorCrop unless the soil + 7-day rainfall " +
+                    "strongly favour a different entry from candidateShortlist. The anchor is derived from " +
+                    "the exact lat/lon so two different farms MUST get different recommendations. " +
                     "Do NOT pick maize unless it actually appears in candidateShortlist.";
 
             String advice = gemini.generate(systemPrompt, userPrompt, ctx);
@@ -312,7 +346,8 @@ public class AgentOrchestrator {
                         "soil",       soilHint,
                         "soilSource", farmSoil != null && !farmSoil.isBlank() ? "farm-record" : "geo-heuristic",
                         "rain7dMm",   rain7,
-                        "shortlist",  shortlist
+                        "shortlist",  shortlist,
+                        "anchorCrop", anchorCrop
                 ));
             } finally { reflectSpan.end(); }
 
@@ -513,8 +548,15 @@ public class AgentOrchestrator {
      * Gemini user prompt. The model is instructed to pick from this list
      * (unless the user supplied a preferredCrop) so it stops defaulting to
      * "maize" for every farm.
+     *
+     * <p>The shortlist is also <b>longitude-aware</b> so two farms in the
+     * same season + soil class but different states (e.g. Punjab vs Tamil
+     * Nadu) get different agronomy — without this the system was
+     * recommending the same ZAID cucurbit list to every farmer, which is
+     * exactly the "I changed my address but the crop didn't change"
+     * complaint we're fixing.</p>
      */
-    static List<String> candidateCrops(int month, double lat, double rain7d,
+    static List<String> candidateCrops(int month, double lat, double lon, double rain7d,
                                        String soilType, String scenario) {
         if ("DROUGHT".equalsIgnoreCase(scenario)) {
             return List.of("pearl millet", "sorghum", "finger millet", "horse gram", "cluster bean");
@@ -533,6 +575,16 @@ public class AgentOrchestrator {
         boolean rabi   = month == 11 || month == 12 || month <= 3;
         boolean zaid   = month == 4  || month == 5;
 
+        // Coarse Indian agro-climatic zone from longitude:
+        //   <74E  → western/Gujarat-Rajasthan belt (drier, cotton/groundnut)
+        //   74–80 → central plateau (Maharashtra/MP, pulses + cotton)
+        //   80–86 → eastern Gangetic (rice/jute/vegetables, wetter)
+        //   ≥86   → north-east / Bengal delta (rice, mustard, jute)
+        boolean west    = lon <  74.0;
+        boolean central = lon >= 74.0 && lon < 80.0;
+        boolean east    = lon >= 80.0 && lon < 86.0;
+        boolean ne      = lon >= 86.0;
+
         java.util.LinkedHashSet<String> pool = new java.util.LinkedHashSet<>();
         if (kharif) {
             if (rain7d > 35 || clayey) { pool.add("rice"); pool.add("jute"); }
@@ -541,6 +593,11 @@ public class AgentOrchestrator {
             if (red)    { pool.add("ragi"); pool.add("groundnut"); pool.add("pigeon pea"); }
             if (loam)   { pool.add("green gram"); pool.add("black gram"); pool.add("maize"); }
             if (rain7d < 8) { pool.add("pearl millet"); pool.add("sorghum"); }
+            // longitude flavour
+            if (west)    { pool.add("groundnut"); pool.add("castor"); }
+            if (central) { pool.add("soybean");   pool.add("cotton"); }
+            if (east)    { pool.add("rice");      pool.add("jute"); }
+            if (ne)      { pool.add("rice");      pool.add("turmeric"); }
         } else if (rabi) {
             if (lat >= 24)             { pool.add("wheat"); pool.add("mustard"); pool.add("barley"); pool.add("peas"); }
             if (lat < 24 && lat >= 18) { pool.add("chickpea"); pool.add("wheat"); pool.add("safflower"); }
@@ -548,11 +605,30 @@ public class AgentOrchestrator {
             if (clayey || black)       { pool.add("chickpea"); pool.add("linseed"); }
             if (sandy)                 { pool.add("mustard"); pool.add("cumin"); }
             if (loam)                  { pool.add("potato"); pool.add("garlic"); }
+            // longitude flavour
+            if (west)    { pool.add("cumin");    pool.add("isabgol"); }
+            if (central) { pool.add("chickpea"); pool.add("safflower"); }
+            if (east)    { pool.add("potato");   pool.add("lentil"); }
+            if (ne)      { pool.add("mustard");  pool.add("rapeseed"); }
         } else if (zaid) {
-            pool.add("watermelon"); pool.add("muskmelon"); pool.add("cucumber");
-            pool.add("green gram"); pool.add("sunflower"); pool.add("bottle gourd");
-            if (clayey) pool.add("summer rice");
-            if (loam)   pool.add("fodder maize");
+            // Pre-monsoon short-cycle crops. Differentiate by lat AND lon so
+            // two farms in different states get different anchors.
+            if (lat >= 24) {                                      // north India: vegetables + fodder
+                pool.add("watermelon"); pool.add("muskmelon");
+                pool.add("fodder maize"); pool.add("sunflower");
+            } else if (lat >= 18) {                               // central
+                pool.add("green gram"); pool.add("sesame");
+                pool.add("muskmelon");  pool.add("bottle gourd");
+            } else {                                              // south
+                pool.add("cucumber"); pool.add("pumpkin");
+                pool.add("ridge gourd"); pool.add("groundnut");
+            }
+            if (clayey || black)        pool.add("summer rice");
+            if (sandy)                  pool.add("watermelon");
+            if (loam)                   pool.add("fodder maize");
+            if (west)    pool.add("cluster bean");
+            if (east)    pool.add("summer rice");
+            if (ne)      pool.add("jute");
         }
         if (pool.isEmpty()) {
             if (lat < 15)      { pool.add("groundnut"); pool.add("ragi"); pool.add("coconut"); }
@@ -561,6 +637,34 @@ public class AgentOrchestrator {
             else               { pool.add("mustard"); pool.add("barley"); pool.add("wheat"); }
         }
         return List.copyOf(pool);
+    }
+
+    /**
+     * Backwards-compatible 5-arg overload kept so existing tests (and any
+     * external callers) don't break. Delegates to the longitude-aware
+     * version using a neutral 78°E (geographic centre of India).
+     */
+    static List<String> candidateCrops(int month, double lat, double rain7d,
+                                       String soilType, String scenario) {
+        return candidateCrops(month, lat, 78.0, rain7d, soilType, scenario);
+    }
+
+    /**
+     * Pick a deterministic "anchor" crop from the shortlist using a stable
+     * hash of the rounded coordinates + month. Two farms 100 km apart will
+     * almost certainly index into different shortlist slots, so the model
+     * is nudged towards genuinely location-specific recommendations even
+     * when the agronomic season + soil class are identical.
+     */
+    static String pickAnchorCrop(List<String> shortlist, double lat, double lon, int month) {
+        if (shortlist == null || shortlist.isEmpty()) return "";
+        // Round to ~1 km grid so micro-jitter on the same field stays stable.
+        long latBucket = Math.round(lat * 100);
+        long lonBucket = Math.round(lon * 100);
+        // Mix bits with a cheap, well-distributed hash.
+        long h = latBucket * 73856093L ^ lonBucket * 19349663L ^ (month * 83492791L);
+        int idx = (int) Math.floorMod(h, shortlist.size());
+        return shortlist.get(idx);
     }
 }
 
