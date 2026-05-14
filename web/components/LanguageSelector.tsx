@@ -21,10 +21,10 @@ export default function LanguageSelector({
         <button key={l.code}
                 onClick={() => onChange(l.code)}
                 className={
-                  "rounded-md px-2.5 py-1 text-xs border transition " +
+                  "rounded-md px-3 py-1.5 text-sm border transition " +
                   (value === l.code
-                    ? "bg-emerald-400/20 border-emerald-400/60 text-emerald-200"
-                    : "bg-white/[0.03] border-white/10 text-slate-400 hover:border-white/20")
+                    ? "bg-emerald-400/20 border-emerald-400/60 text-emerald-200 font-semibold"
+                    : "bg-white/[0.03] border-white/10 text-slate-300 hover:border-white/20 hover:text-slate-100")
                 }>
           {l.label}
         </button>
