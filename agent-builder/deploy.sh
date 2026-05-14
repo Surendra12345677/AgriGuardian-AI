@@ -20,7 +20,7 @@
 # ─────────────────────────────────────────────────────────────────────
 set -euo pipefail
 
-PROJECT_ID="${GCP_PROJECT_ID:-agriguardian-ai-498206}"
+PROJECT_ID="${GCP_PROJECT_ID:-agriguardian-ai-496206}"
 REGION="${GCP_REGION:-us-central1}"
 BACKEND_SERVICE="agriguardian-ai"
 WEB_SERVICE="agriguardian-web"
