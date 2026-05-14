@@ -53,9 +53,10 @@ export default function Hero() {
         </div>
 
         {/* Right: Mini agent-pipeline preview */}
-        <div className="lg:col-span-5">
+        <div className="lg:col-span-5 w-full lg:justify-self-end">
           <div className="relative rounded-2xl border border-white/10 bg-[#06090f]/80
-                          backdrop-blur-md shadow-2xl shadow-emerald-500/5 overflow-hidden">
+                          backdrop-blur-md shadow-2xl shadow-emerald-500/5 overflow-hidden
+                          w-full max-w-md xl:max-w-lg mx-auto lg:mx-0">
             <div className="flex items-center gap-2 px-4 py-2.5 border-b border-white/5
                             bg-gradient-to-r from-white/[0.04] to-transparent">
               <span className="h-2.5 w-2.5 rounded-full bg-rose-400/60" />

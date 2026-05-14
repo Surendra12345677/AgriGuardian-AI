@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, type Farm, type Recommendation } from "@/lib/api";
 import { AgentTrace } from "./AgentTrace";
 import { type Lang } from "./LanguageSelector";
@@ -47,12 +47,36 @@ export default function AgentPanel({
   const [rec,  setRec]    = useState<Recommendation | null>(null);
   const [tStart, setTStart] = useState<number | null>(null);
   const [tEnd,   setTEnd]   = useState<number | null>(null);
+
+  // Track which farm the currently-displayed result belongs to. When the
+  // user switches the active farm in the FarmContextBar above (same
+  // AgentPanel instance, new `farm` prop) we (a) clear the stale result
+  // so they don't think it's the new farm's plan, and (b) flag the next
+  // ask() so it bypasses the cache. Without this, picking a different
+  // farm and immediately replanning could return the previous farm's
+  // cached recommendation if everything else (crop/scenario/lang)
+  // happened to match.
+  const lastFarmIdRef = useRef<string | undefined>(farm?.id);
+  const [farmChanged, setFarmChanged] = useState(false);
+  useEffect(() => {
+    if (!farm) { lastFarmIdRef.current = undefined; return; }
+    if (lastFarmIdRef.current && lastFarmIdRef.current !== farm.id) {
+      setRec(null);
+      setError(null);
+      setTStart(null);
+      setTEnd(null);
+      setFarmChanged(true);
+    }
+    lastFarmIdRef.current = farm.id;
+  }, [farm?.id]);
   async function ask(opts?: { forceLive?: boolean; cropOverride?: string }) {
     if (!farm) return;
     setBusy(true); setError(null); setRec(null); setTEnd(null);
     setTStart(performance.now());
+    // First call after switching farms always bypasses the cache.
+    const forceLive = !!opts?.forceLive || farmChanged;
     try {
-      if (opts?.forceLive) {
+      if (forceLive) {
         // Best-effort cache reset on the server too — ignore errors so the
         // planner still runs even if the admin endpoint is locked down.
         try { await api.clearCache(); } catch { /* non-fatal */ }
@@ -66,12 +90,13 @@ export default function AgentPanel({
         preferredCrop: cropToUse || undefined,
         language,
         scenario: "BASELINE",
-        // When the user picks a different crop from the shortlist we ALWAYS
-        // bypass the cache so they actually see a fresh plan instead of the
-        // previous cached recommendation.
-        forceLive: opts?.forceLive || !!opts?.cropOverride,
+        // When the user picks a different crop from the shortlist, OR the
+        // active farm just changed, we ALWAYS bypass the cache so they
+        // see a fresh plan instead of the previous cached recommendation.
+        forceLive: forceLive || !!opts?.cropOverride,
       });
       setRec(out);
+      setFarmChanged(false);
     } catch (err: any) {
       setError(err.message);
     } finally {
