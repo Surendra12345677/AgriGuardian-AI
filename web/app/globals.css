@@ -59,6 +59,21 @@ body {
          focus:border-emerald-500/60 focus:bg-white/[0.06];
 }
 
+/* ── Number inputs ─────────────────────────────────────────────────
+   Hide the native spinner buttons (the tiny up/down arrows). They
+   shrink the typing area, look noisy on dark UI, and accidentally
+   change the value when the user scrolls the page over a focused
+   field. Users type the number directly instead. */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
 .label { @apply text-[11px] uppercase tracking-wider text-slate-400; }
 
 @keyframes pulseRing {
