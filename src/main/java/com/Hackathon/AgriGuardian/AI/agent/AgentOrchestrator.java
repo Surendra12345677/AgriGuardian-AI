@@ -218,6 +218,13 @@ public class AgentOrchestrator {
                 case "te" -> "Telugu";
                 case "bn" -> "Bengali";
                 case "pa" -> "Punjabi";
+                // European locales for EU smallholders.
+                case "es" -> "Spanish";
+                case "fr" -> "French";
+                case "de" -> "German";
+                case "it" -> "Italian";
+                case "pt" -> "Portuguese";
+                case "nl" -> "Dutch";
                 default -> "English";
             };
 

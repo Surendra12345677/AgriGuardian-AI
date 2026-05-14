@@ -65,7 +65,7 @@ export default function Navbar() {
           : "border-transparent bg-transparent backdrop-blur-md")
       }
     >
-      <div className="mx-auto max-w-[1760px] px-5 lg:px-8 xl:px-12 h-20 xl:h-[88px] 2xl:h-24 flex items-center justify-between gap-5">
+      <div className="mx-auto w-full max-w-[1760px] 2xl:max-w-[2100px] 3xl:max-w-[2560px] px-5 lg:px-8 xl:px-12 2xl:px-16 h-20 xl:h-[88px] 2xl:h-24 flex items-center justify-between gap-5">
         <button onClick={() => go({ label: "Home", section: "home" })}
                 className="flex items-center gap-3 xl:gap-3.5 shrink-0">
           <span className="relative grid place-items-center h-11 w-11 xl:h-12 xl:w-12 2xl:h-14 2xl:w-14 rounded-2xl
@@ -132,7 +132,7 @@ export default function Navbar() {
 
       {open && (
         <div className="lg:hidden border-t border-white/5 bg-[#05070b]/95 backdrop-blur-xl">
-          <div className="mx-auto max-w-[1760px] px-5 py-3 flex flex-col gap-1">
+          <div className="mx-auto max-w-[1760px] 2xl:max-w-[2100px] 3xl:max-w-[2560px] px-5 lg:px-8 xl:px-12 2xl:px-16 py-3 flex flex-col gap-1">
             {LINKS.map(l => {
               const a = l.section === active;
               return (
