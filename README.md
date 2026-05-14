@@ -14,9 +14,11 @@
 **Hackathon:** Google Cloud Rapid Agent Hackathon — *Building Agents for Real-World Challenges*
 **Partner track:** 🟣 **Arize** (Arize MCP + Arize AX traces)
 **Languages:** 13 — English, Hindi, Marathi, Tamil, Telugu, Bengali, Punjabi · Spanish, French, German, Italian, Portuguese, Dutch
-**Status:** 🚧 Active development — see [`docs/HACKATHON_PLAN.md`](./docs/HACKATHON_PLAN.md)
+**Status:** ✅ Live on Google Cloud Run
 **Submission:** [`SUBMISSION.md`](./SUBMISSION.md) · [`DEVPOST_FORM.md`](./DEVPOST_FORM.md)
-**Demo video:** _coming soon_ · **Live URL:** _pending GCP billing_
+**🌐 Live demo:** **https://agriguardian-web-963977203522.us-central1.run.app**
+**📘 Backend Swagger:** https://agriguardian-ai-zqafbkccaa-uc.a.run.app/swagger-ui.html
+**Demo video:** _coming soon_
 
 ---
 
