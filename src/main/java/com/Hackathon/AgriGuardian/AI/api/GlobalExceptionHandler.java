@@ -1,5 +1,6 @@
 package com.Hackathon.AgriGuardian.AI.api;
 
+import com.Hackathon.AgriGuardian.AI.ai.GeminiException;
 import com.Hackathon.AgriGuardian.AI.observability.CorrelationIdFilter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -62,6 +63,17 @@ public class GlobalExceptionHandler {
                 Map.of());
     }
 
+    /** Surface real Gemini failures (auth / quota / model-not-found) to the UI. */
+    @ExceptionHandler(GeminiException.class)
+    public ProblemDetail handleGemini(GeminiException ex) {
+        log.warn("Gemini failure surfaced to caller: {}", ex.getMessage());
+        return problem(HttpStatus.BAD_GATEWAY,
+                "Gemini upstream failure",
+                ex.getMessage(),
+                "/problems/gemini",
+                Map.of());
+    }
+
     @ExceptionHandler(Exception.class)
     public ProblemDetail handleGeneric(Exception ex) {
         log.error("Unhandled exception", ex);
@@ -86,4 +98,3 @@ public class GlobalExceptionHandler {
         return p;
     }
 }
-

@@ -44,7 +44,16 @@ async function http<T>(path: string, init?: RequestInit): Promise<T> {
   });
   if (!res.ok) {
     const body = await res.text();
-    throw new Error(`${res.status} ${res.statusText} — ${body || path}`);
+    // Spring returns RFC-7807 application/problem+json — pull out the
+    // human-readable `detail` so the UI can show actionable upstream errors
+    // (e.g. Gemini quota / billing / model-not-found messages).
+    let detail = body || path;
+    try {
+      const j = JSON.parse(body);
+      if (j && typeof j.detail === "string" && j.detail.trim()) detail = j.detail;
+      else if (j && typeof j.title === "string") detail = j.title;
+    } catch { /* not JSON — keep raw body */ }
+    throw new Error(detail);
   }
   return (await res.json()) as T;
 }
@@ -53,6 +62,9 @@ export const api = {
   listFarms:  () => http<Farm[]>("/api/v1/farms"),
   createFarm: (f: Omit<Farm, "id" | "createdAt" | "chosenCrop">) =>
     http<Farm>("/api/v1/farms", { method: "POST", body: JSON.stringify(f) }),
+  /** PUT — used by the "Edit selected farm" card to relocate the pin. */
+  updateFarm: (id: string, f: Omit<Farm, "id" | "createdAt" | "chosenCrop">) =>
+    http<Farm>(`/api/v1/farms/${id}`, { method: "PUT", body: JSON.stringify(f) }),
   recommend:  (req: {
     farmId: string;
     latitude: number;
@@ -60,10 +72,14 @@ export const api = {
     preferredCrop?: string;
     language?: string;
     scenario?: Scenario;
+    forceLive?: boolean;
   }) =>
     http<Recommendation>("/api/v1/recommendations", {
       method: "POST", body: JSON.stringify(req),
     }),
+  clearCache: () =>
+    http<{ ok: boolean; droppedEntries: number; message: string }>(
+      "/api/v1/admin/cache/clear", { method: "POST" }),
   diagnose: (req: DiagnoseRequest) =>
     http<DiagnoseResponse>("/api/v1/diagnose", {
       method: "POST", body: JSON.stringify(req),

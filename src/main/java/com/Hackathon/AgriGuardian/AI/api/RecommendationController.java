@@ -48,6 +48,7 @@ public class RecommendationController {
                 r.getId(),
                 r.getFarmId(),
                 r.getReasoning(),
+                r.getConfidenceScore(),
                 List.of(), // tasks generation lives in a future ticket
                 r.getCreatedAt(),
                 r.getTraceId()
