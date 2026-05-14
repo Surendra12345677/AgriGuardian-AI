@@ -415,7 +415,7 @@ function ModePill({ active, disabled, onClick, label, hint }: {
       onClick={onClick}
       disabled={disabled}
       className={[
-        "px-4 py-2.5 rounded-md text-sm font-medium transition flex items-center gap-2",
+        "px-5 py-3 rounded-md text-base font-semibold transition flex items-center gap-2",
         active
           ? "bg-emerald-400/15 text-emerald-200 border border-emerald-400/30"
           : "text-slate-300 hover:text-slate-100 border border-transparent",
@@ -424,7 +424,7 @@ function ModePill({ active, disabled, onClick, label, hint }: {
       title={hint}
     >
       <span>{label}</span>
-      {hint && <span className="text-[11px] text-slate-500 hidden sm:inline">· {hint}</span>}
+      {hint && <span className="text-[12px] text-slate-500 hidden sm:inline">· {hint}</span>}
     </button>
   );
 }

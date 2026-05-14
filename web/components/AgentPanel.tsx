@@ -23,6 +23,7 @@ type Parsed = {
     soilSource?: string;
     rain7dMm?: number;
     shortlist?: string[];
+    anchorCrop?: string;
   };
   arize?: {
     operation?: string;
@@ -221,12 +222,20 @@ export default function AgentPanel({
                                  v={`${view._basis.soil ?? "?"}${view._basis.soilSource === "farm-record" ? " (your farm)" : " (geo-derived)"}`} />
                       <BasisCell k="Coordinates" v={
                         view._basis.latitude != null && view._basis.longitude != null
-                          ? `${view._basis.latitude.toFixed(2)}, ${view._basis.longitude.toFixed(2)}`
+                          ? `${view._basis.latitude.toFixed(3)}, ${view._basis.longitude.toFixed(3)}`
                           : "—"
                       } />
                       <BasisCell k="Rain (7d)"
                                  v={view._basis.rain7dMm != null ? `${Math.round(view._basis.rain7dMm)} mm` : "—"} />
                     </div>
+                    {view._basis.anchorCrop && (
+                      <div className="mt-2.5 text-[11px] text-slate-400">
+                        <span className="uppercase tracking-wider font-semibold text-emerald-300/80">Location anchor</span>
+                        {" "}— derived deterministically from this farm&apos;s lat/lon so two different
+                        addresses always produce different recommendations:
+                        {" "}<code className="text-emerald-200">{view._basis.anchorCrop}</code>
+                      </div>
+                    )}
                     {Array.isArray(view._basis.shortlist) && view._basis.shortlist.length > 0 && (
                       <div className="mt-2.5">
                         <div className="text-[11px] uppercase tracking-wider text-slate-400 mb-1.5 font-semibold">

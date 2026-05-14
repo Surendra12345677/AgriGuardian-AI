@@ -1,5 +1,6 @@
 package com.Hackathon.AgriGuardian.AI.api;
 
+import com.Hackathon.AgriGuardian.AI.agent.AgentOrchestrator;
 import com.Hackathon.AgriGuardian.AI.api.dto.FarmRequest;
 import com.Hackathon.AgriGuardian.AI.domain.model.Farm;
 import com.Hackathon.AgriGuardian.AI.domain.repo.FarmRepository;
@@ -31,9 +32,13 @@ public class FarmController {
     private static final Logger log = LoggerFactory.getLogger(FarmController.class);
 
     private final FarmRepository repo;
+    private final AgentOrchestrator orchestrator;
 
-    public FarmController(FarmRepository repo) {
+    public FarmController(FarmRepository repo,
+                          @org.springframework.beans.factory.annotation.Autowired(required = false)
+                          AgentOrchestrator orchestrator) {
         this.repo = repo;
+        this.orchestrator = orchestrator;
     }
 
     @PostMapping
@@ -92,6 +97,15 @@ public class FarmController {
         Farm saved = repo.save(existing);
         log.info("Updated farm id={} owner={} lat={} lon={}",
                 saved.getId(), saved.getFarmerName(), saved.getLatitude(), saved.getLongitude());
+        // The user just changed something material about this farm
+        // (most often: relocated the pin or switched soil type). Drop
+        // every cached recommendation tied to this farm so the next
+        // /recommendations call always re-runs Gemini against the new
+        // profile instead of returning the stale "before-the-edit" plan.
+        if (orchestrator != null) {
+            try { orchestrator.evictFarm(saved.getId()); }
+            catch (Exception ex) { log.debug("cache eviction skipped: {}", ex.toString()); }
+        }
         return saved;
     }
 
