@@ -56,10 +56,11 @@ google-cloud-agent-builder, gemini-3, arize, arize-mcp, mongodb, mongodb-mcp, sp
 
 | Devpost field | Value |
 |---|---|
-| Website / hosted demo | `<paste your Cloud Run / Vercel URL here>` |
+| Website / hosted demo | `https://agriguardian-web-963977203522.us-central1.run.app` |
 | GitHub repo | `https://github.com/Surendra12345677/AgriGuardian-AI` |
 | Video demo | `<paste your YouTube unlisted URL here>` |
 | Documentation | `https://github.com/Surendra12345677/AgriGuardian-AI/blob/main/SUBMISSION.md` |
+| Backend Swagger (optional) | `https://agriguardian-ai-zqafbkccaa-uc.a.run.app/swagger-ui.html` |
 
 ## 7. Test instructions (paste into "How to run / test")
 ```
