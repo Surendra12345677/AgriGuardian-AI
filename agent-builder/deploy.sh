@@ -111,6 +111,29 @@ for s in agriguardian-mongodb-uri agriguardian-gemini-key agriguardian-arize-key
       --project "$PROJECT_ID" >/dev/null || true
 done
 
+# Cloud Build (when invoked via `gcloud run deploy --source .`) uses the
+# default Compute Engine service account on new GCP projects since 2024.
+# It needs to read the uploaded source tarball from the staging GCS
+# bucket, write images to Artifact Registry, and stream build logs.
+# Without these, the very first deploy fails with:
+#   "<sa> does not have storage.objects.get access to the Google Cloud
+#    Storage object. Permission 'storage.objects.get' denied on resource"
+# Granting them is idempotent.
+echo "==> Granting Cloud Build roles to $RUNTIME_SA (one-time bootstrap)"
+for role in \
+    roles/cloudbuild.builds.builder \
+    roles/storage.objectViewer \
+    roles/artifactregistry.writer \
+    roles/logging.logWriter \
+    roles/run.admin \
+    roles/iam.serviceAccountUser ; do
+  gcloud projects add-iam-policy-binding "$PROJECT_ID" \
+      --member="serviceAccount:$RUNTIME_SA" \
+      --role="$role" \
+      --condition=None \
+      --quiet >/dev/null || true
+done
+
 # ── 1/2  Backend (Spring Boot) ──────────────────────────────────────
 BACKEND_ENV="SPRING_PROFILES_ACTIVE=prod,GEMINI_MODEL=$GEMINI_MODEL,GEMINI_STUB_MODE=auto,ARIZE_ENABLED=true,ARIZE_SPACE_ID=$ARIZE_SPACE_ID,ARIZE_OTLP_ENDPOINT=$ARIZE_OTLP_ENDPOINT,AGRIGUARDIAN_ARIZE_PROJECT_NAME=agriguardian-ai,MCP_ARIZE_ENABLED=false,MCP_MONGODB_ENABLED=false"
 BACKEND_SECRETS="MONGODB_URI=agriguardian-mongodb-uri:latest,SPRING_DATA_MONGODB_URI=agriguardian-mongodb-uri:latest,GEMINI_API_KEY=agriguardian-gemini-key:latest,ARIZE_API_KEY=agriguardian-arize-key:latest"
