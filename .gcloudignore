@@ -1,0 +1,47 @@
+# Files NOT uploaded to Cloud Build when running `gcloud run deploy --source .`
+# Mirror .dockerignore + drop heavy local-only artefacts.
+
+# Local secrets — must NEVER reach the build context
+.env
+.env.*
+!.env.example
+secrets/
+
+# Editor / OS noise
+.idea/
+.vscode/
+.DS_Store
+*.iml
+
+# Git history isn't needed to build the image
+.git/
+.gitignore
+.gitattributes
+
+# Local Gradle / build outputs (built fresh in the image)
+.gradle/
+build/
+out/
+**/target/
+
+# Frontend node_modules / Next build cache (built fresh in web image)
+web/node_modules/
+web/.next/
+web/.vercel/
+web/out/
+
+# Test reports + coverage — not needed at runtime
+**/coverage/
+**/test-results/
+**/reports/
+
+# Python / Java analyzer caches
+**/__pycache__/
+*.pyc
+*.class
+
+# Documentation that doesn't affect the runtime image
+docs/
+*.md
+!README.md
+
