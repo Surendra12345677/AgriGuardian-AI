@@ -65,49 +65,49 @@ export default function Navbar() {
           : "border-transparent bg-transparent backdrop-blur-md")
       }
     >
-      <div className="mx-auto max-w-[1760px] px-5 lg:px-8 xl:px-12 h-20 flex items-center justify-between gap-5">
+      <div className="mx-auto max-w-[1760px] px-5 lg:px-8 xl:px-12 h-20 xl:h-[88px] flex items-center justify-between gap-5">
         <button onClick={() => go({ label: "Home", section: "home" })}
-                className="flex items-center gap-3 shrink-0">
-          <span className="relative grid place-items-center h-11 w-11 rounded-2xl
+                className="flex items-center gap-3 xl:gap-3.5 shrink-0">
+          <span className="relative grid place-items-center h-11 w-11 xl:h-12 xl:w-12 rounded-2xl
                            bg-gradient-to-br from-emerald-400 to-emerald-600
-                           text-slate-950 font-black text-lg shadow-lg shadow-emerald-500/30">
+                           text-slate-950 font-black text-lg xl:text-xl shadow-lg shadow-emerald-500/30">
             AG
             <span className="absolute -bottom-1 -right-1 h-3.5 w-3.5 rounded-full bg-emerald-400
                              ring-2 ring-[#05070b] animate-pulse" />
           </span>
           <div className="leading-tight text-left">
-            <div className="font-semibold text-slate-100 tracking-tight text-base sm:text-lg">
+            <div className="font-semibold text-slate-100 tracking-tight text-base sm:text-lg xl:text-xl">
               AgriGuardian <span className="text-emerald-400">AI</span>
             </div>
-            <div className="text-[11px] uppercase tracking-[0.2em] text-slate-500">
+            <div className="text-[11px] xl:text-[12px] uppercase tracking-[0.2em] text-slate-500">
               Plan · Reason · Act
             </div>
           </div>
         </button>
 
         <nav className="hidden lg:flex items-center gap-1.5 bg-white/[0.03] border border-white/5
-                        rounded-full p-1.5">
+                        rounded-full p-1.5 xl:p-2">
           {LINKS.map(l => {
             const a = l.section === active;
             return (
               <button key={l.label} onClick={() => go(l)}
                       className={
-                        "px-4 py-2 text-[15px] font-medium rounded-full transition flex items-center gap-2 " +
+                        "px-4 py-2 xl:px-5 xl:py-2.5 text-[15px] xl:text-base font-medium rounded-full transition flex items-center gap-2 " +
                         (a
                           ? "bg-emerald-400/15 text-emerald-200 shadow-inner shadow-emerald-500/10"
                           : "text-slate-300 hover:text-slate-50 hover:bg-white/[0.05]")
                       }>
-                <span className="text-base opacity-90" aria-hidden>{l.icon}</span>
+                <span className="text-base xl:text-lg opacity-90" aria-hidden>{l.icon}</span>
                 {l.label}
               </button>
             );
           })}
         </nav>
 
-        <div className="flex items-center gap-2.5">
-          <a className="hidden sm:inline-flex btn-ghost text-sm !py-2 !px-3.5"
+        <div className="flex items-center gap-2.5 xl:gap-3">
+          <a className="hidden sm:inline-flex btn-ghost text-sm xl:text-[15px] !py-2 !px-3.5 xl:!py-2.5 xl:!px-4"
              href="/swagger-ui.html" target="_blank" rel="noreferrer">API</a>
-          <a className="hidden sm:inline-flex btn-ghost text-sm !py-2 !px-3.5 items-center gap-1.5"
+          <a className="hidden sm:inline-flex btn-ghost text-sm xl:text-[15px] !py-2 !px-3.5 xl:!py-2.5 xl:!px-4 items-center gap-1.5"
              href="https://github.com/Surendra12345677/AgriGuardian-AI"
              target="_blank" rel="noreferrer">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
@@ -116,7 +116,7 @@ export default function Navbar() {
             GitHub
           </a>
           <button onClick={() => go({ label: "Get started", section: "onboard" })}
-                  className="btn-primary text-sm !py-2.5 !px-4">
+                  className="btn-primary text-sm xl:text-[15px] !py-2.5 !px-4 xl:!py-3 xl:!px-5">
             Get started
           </button>
           <button className="lg:hidden btn-ghost !p-2.5"

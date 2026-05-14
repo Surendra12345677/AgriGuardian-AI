@@ -293,18 +293,18 @@ function FarmContextBar({ farm, farms, onSwitch, onEdit }: {
 }) {
   return (
     <div className="sticky top-16 z-30 -mx-2 px-2">
-      <div className="card !rounded-2xl px-4 py-3 flex items-center gap-3 flex-wrap
+      <div className="card !rounded-2xl px-4 lg:px-5 py-3 lg:py-3.5 flex items-center gap-3 lg:gap-4 flex-wrap
                       backdrop-blur-xl bg-[#0a0f17]/85 border-emerald-400/20">
-        <div className="grid place-items-center h-9 w-9 rounded-lg bg-emerald-400/10
-                        border border-emerald-400/30 text-emerald-300">👤</div>
+        <div className="grid place-items-center h-10 w-10 lg:h-11 lg:w-11 rounded-xl bg-emerald-400/10
+                        border border-emerald-400/30 text-emerald-300 text-lg">👤</div>
         <div className="min-w-0 flex-1">
-          <div className="text-[10px] uppercase tracking-wider text-slate-500">Active farm</div>
+          <div className="text-[10px] uppercase tracking-wider text-emerald-300/80 font-semibold">Active farm</div>
           <div className="flex items-baseline gap-2 flex-wrap">
-            <span className="font-semibold text-slate-100 truncate">{farm.farmerName}</span>
-            <span className="font-mono text-[11px] text-slate-500">
+            <span className="font-semibold text-slate-100 text-base lg:text-lg truncate">{farm.farmerName}</span>
+            <span className="font-mono text-[12px] text-slate-400">
               {farm.latitude.toFixed(3)}, {farm.longitude.toFixed(3)}
             </span>
-            <span className="text-[11px] text-slate-400">
+            <span className="text-[12px] text-slate-400">
               · {farm.landSizeAcres} ac · {farm.soilType} · water {farm.waterAvailability}
             </span>
           </div>
@@ -316,9 +316,9 @@ function FarmContextBar({ farm, farms, onSwitch, onEdit }: {
               const f = farms.find(x => x.id === e.target.value);
               if (f) onSwitch(f);
             }}
-            className="bg-white/[0.04] border border-white/10 rounded-md text-xs
-                       px-2 py-1.5 text-slate-200 hover:border-emerald-400/40
-                       focus:outline-none focus:border-emerald-400/60"
+            className="bg-white/[0.04] border border-white/10 rounded-lg text-sm
+                       px-3 py-2 text-slate-100 hover:border-emerald-400/40
+                       focus:outline-none focus:border-emerald-400/60 min-w-[140px]"
             title="Switch active farm"
           >
             {farms.map(f => (
@@ -328,8 +328,9 @@ function FarmContextBar({ farm, farms, onSwitch, onEdit }: {
             ))}
           </select>
         )}
-        <button onClick={onEdit} className="btn-ghost text-xs !py-1.5 !px-3">
-          ✏️ Edit
+        <button onClick={onEdit}
+                className="btn-primary text-sm !py-2 !px-4 inline-flex items-center gap-1.5">
+          <span aria-hidden>✏️</span> Edit farm
         </button>
       </div>
     </div>
@@ -347,7 +348,7 @@ function StepStrip({ current, onJump, hasFarm }: {
 }) {
   const idx = Math.max(0, STEPS.findIndex(s => s.hash === current));
   return (
-    <div className="card p-2 flex items-stretch gap-1 overflow-x-auto">
+    <div className="card p-2 flex items-stretch gap-1.5 overflow-x-auto">
       {STEPS.map((s, i) => {
         const active = s.hash === current;
         const done   = i < idx;
@@ -358,7 +359,7 @@ function StepStrip({ current, onJump, hasFarm }: {
             onClick={() => onJump(s.hash)}
             disabled={blocked}
             className={[
-              "flex-1 min-w-[150px] px-3 py-2 rounded-lg text-left transition flex items-center gap-3",
+              "flex-1 min-w-[170px] px-4 py-3 rounded-lg text-left transition flex items-center gap-3",
               active
                 ? "bg-emerald-400/10 border border-emerald-400/30"
                 : done
@@ -369,7 +370,7 @@ function StepStrip({ current, onJump, hasFarm }: {
             title={blocked ? "Save a farm first" : s.hint}
           >
             <span className={[
-              "grid place-items-center h-7 w-7 rounded-full text-xs font-bold shrink-0",
+              "grid place-items-center h-8 w-8 rounded-full text-sm font-bold shrink-0",
               active
                 ? "bg-emerald-400 text-slate-950"
                 : done
@@ -379,10 +380,10 @@ function StepStrip({ current, onJump, hasFarm }: {
               {done ? "✓" : i + 1}
             </span>
             <div className="min-w-0">
-              <div className={"text-sm font-medium " + (active ? "text-emerald-200" : "text-slate-200")}>
+              <div className={"text-[15px] font-semibold " + (active ? "text-emerald-200" : "text-slate-100")}>
                 <span className="mr-1.5" aria-hidden>{s.icon}</span>{s.label}
               </div>
-              <div className="text-[11px] text-slate-500 truncate">{s.hint}</div>
+              <div className="text-[12px] text-slate-400 truncate">{s.hint}</div>
             </div>
           </button>
         );
@@ -394,8 +395,8 @@ function StepStrip({ current, onJump, hasFarm }: {
 /** Compact language selector that fits in a section header's action slot. */
 function LanguagePill({ lang, onChange }: { lang: Lang; onChange: (l: Lang) => void }) {
   return (
-    <div className="card p-1.5 inline-flex items-center gap-2">
-      <span className="text-[10px] uppercase tracking-wider text-slate-500 px-2">Reply</span>
+    <div className="card p-2 inline-flex items-center gap-2">
+      <span className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold px-2">Reply in</span>
       <LanguageSelector value={lang} onChange={onChange} />
     </div>
   );
@@ -414,16 +415,16 @@ function ModePill({ active, disabled, onClick, label, hint }: {
       onClick={onClick}
       disabled={disabled}
       className={[
-        "px-3 py-1.5 rounded-md text-xs font-medium transition flex items-center gap-2",
+        "px-4 py-2.5 rounded-md text-sm font-medium transition flex items-center gap-2",
         active
           ? "bg-emerald-400/15 text-emerald-200 border border-emerald-400/30"
-          : "text-slate-400 hover:text-slate-200 border border-transparent",
+          : "text-slate-300 hover:text-slate-100 border border-transparent",
         disabled ? "opacity-40 cursor-not-allowed" : "",
       ].join(" ")}
       title={hint}
     >
       <span>{label}</span>
-      {hint && <span className="text-[10px] text-slate-500 hidden sm:inline">· {hint}</span>}
+      {hint && <span className="text-[11px] text-slate-500 hidden sm:inline">· {hint}</span>}
     </button>
   );
 }

@@ -46,7 +46,7 @@ export default function AgentPanel({
   const [rec,  setRec]    = useState<Recommendation | null>(null);
   const [tStart, setTStart] = useState<number | null>(null);
   const [tEnd,   setTEnd]   = useState<number | null>(null);
-  async function ask(opts?: { forceLive?: boolean }) {
+  async function ask(opts?: { forceLive?: boolean; cropOverride?: string }) {
     if (!farm) return;
     setBusy(true); setError(null); setRec(null); setTEnd(null);
     setTStart(performance.now());
@@ -56,14 +56,19 @@ export default function AgentPanel({
         // planner still runs even if the admin endpoint is locked down.
         try { await api.clearCache(); } catch { /* non-fatal */ }
       }
+      const cropToUse = opts?.cropOverride ?? crop;
+      if (opts?.cropOverride !== undefined) setCrop(opts.cropOverride);
       const out = await api.recommend({
         farmId:    farm.id,
         latitude:  farm.latitude,
         longitude: farm.longitude,
-        preferredCrop: crop || undefined,
+        preferredCrop: cropToUse || undefined,
         language,
         scenario: "BASELINE",
-        forceLive: opts?.forceLive,
+        // When the user picks a different crop from the shortlist we ALWAYS
+        // bypass the cache so they actually see a fresh plan instead of the
+        // previous cached recommendation.
+        forceLive: opts?.forceLive || !!opts?.cropOverride,
       });
       setRec(out);
     } catch (err: any) {
@@ -122,7 +127,7 @@ export default function AgentPanel({
                      value={crop}
                      onChange={e => setCrop(e.target.value)} />
             </label>
-            <button onClick={() => ask()} disabled={busy} className="btn-primary">
+            <button onClick={() => ask()} disabled={busy} className="btn-primary text-base !py-2.5 !px-5">
               {busy ? <span className="flex items-center gap-2"><Spinner /> Planning…</span>
                     : <>▶ Plan my season</>}
             </button>
@@ -130,7 +135,7 @@ export default function AgentPanel({
               onClick={() => ask({ forceLive: true })}
               disabled={busy}
               title="Skip the result cache and force a fresh Gemini call"
-              className="text-xs px-3 py-2 rounded-lg border border-emerald-400/30 text-emerald-200 hover:bg-emerald-400/[0.06] disabled:opacity-50"
+              className="text-sm px-4 py-2.5 rounded-lg border border-emerald-400/30 text-emerald-200 hover:bg-emerald-400/[0.06] disabled:opacity-50"
             >
               ⟳ Force live
             </button>
@@ -224,25 +229,54 @@ export default function AgentPanel({
                     </div>
                     {Array.isArray(view._basis.shortlist) && view._basis.shortlist.length > 0 && (
                       <div className="mt-2.5">
-                        <div className="text-[10px] uppercase tracking-wider text-slate-500 mb-1">
-                          Candidate shortlist for this location
+                        <div className="text-[11px] uppercase tracking-wider text-slate-400 mb-1.5 font-semibold">
+                          Candidate shortlist for this location · click any to re-plan
                         </div>
                         <div className="flex flex-wrap gap-1.5">
                           {view._basis.shortlist.map((c, i) => {
                             const picked = view.crop && c.toLowerCase() === view.crop.toLowerCase();
                             return (
-                              <span key={i}
+                              <button key={i}
+                                    type="button"
+                                    disabled={busy || !!picked}
+                                    onClick={() => ask({ cropOverride: c })}
+                                    title={picked ? "Currently recommended crop" : `Re-plan with ${c} as the preferred crop`}
                                     className={
-                                      "px-2 py-0.5 rounded-full text-[11px] border " +
+                                      "px-3 py-1 rounded-full text-[12px] border transition " +
                                       (picked
-                                        ? "border-emerald-400/60 bg-emerald-400/15 text-emerald-200 font-semibold"
-                                        : "border-white/10 bg-white/[0.04] text-slate-300")
+                                        ? "border-emerald-400/60 bg-emerald-400/15 text-emerald-200 font-semibold cursor-default"
+                                        : "border-white/10 bg-white/[0.04] text-slate-200 hover:border-emerald-400/50 hover:bg-emerald-400/[0.08] hover:text-emerald-200 disabled:opacity-50 disabled:cursor-not-allowed")
                                     }>
                                 {c}{picked ? " ✓" : ""}
-                              </span>
+                              </button>
                             );
                           })}
                         </div>
+                        {view.crop && (
+                          <div className="mt-3 flex items-center gap-2 flex-wrap">
+                            <span className="text-[11px] text-slate-400">Don&apos;t like {view.crop}?</span>
+                            <button
+                              type="button"
+                              disabled={busy}
+                              onClick={() => {
+                                // Pick the first shortlist crop that ISN'T the current pick.
+                                const alt = (view._basis?.shortlist ?? []).find(
+                                  c => c.toLowerCase() !== (view.crop ?? "").toLowerCase()
+                                );
+                                if (alt) ask({ cropOverride: alt });
+                              }}
+                              className="text-[12px] px-3 py-1.5 rounded-lg border border-amber-300/40 text-amber-200 hover:bg-amber-300/10 disabled:opacity-50">
+                              👎 Suggest a different crop
+                            </button>
+                            <button
+                              type="button"
+                              disabled={busy}
+                              onClick={() => { setCrop(""); ask({ forceLive: true }); }}
+                              className="text-[12px] px-3 py-1.5 rounded-lg border border-emerald-400/30 text-emerald-200 hover:bg-emerald-400/[0.06] disabled:opacity-50">
+                              🔁 Re-plan from scratch
+                            </button>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -295,41 +329,56 @@ export default function AgentPanel({
                   </div>
                 )}
                 {view.arize || rec.traceId ? (
-                  <div className="mt-4">
-                    <div className="label mb-1.5 flex items-center gap-2">
-                      <span>Arize AX · partner telemetry</span>
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-400/15 text-emerald-300 font-semibold uppercase tracking-wider">
+                  <div className="mt-5">
+                    <div className="label mb-2 flex items-center gap-2">
+                      <span className="text-[12px]">Arize AX · partner observability</span>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-400/15 text-emerald-300 font-semibold uppercase tracking-wider animate-pulse">
                         live
                       </span>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-violet-400/15 text-violet-300 font-semibold uppercase tracking-wider">
+                        MCP + OTLP
+                      </span>
                     </div>
-                    <div className="rounded-lg border border-emerald-400/15 bg-emerald-400/[0.04] p-3 space-y-1.5 text-xs">
-                      <div className="flex justify-between gap-2">
-                        <span className="text-slate-400">MCP operation</span>
-                        <code className="text-emerald-200">{view.arize?.operation || "search_traces"}</code>
-                      </div>
-                      <div className="flex justify-between gap-2">
-                        <span className="text-slate-400">Source</span>
-                        <code className="text-slate-200">{view.arize?.source || "arize-mcp"}</code>
-                      </div>
-                      <div className="flex justify-between gap-2">
-                        <span className="text-slate-400">Spans exported</span>
-                        <code className="text-slate-200">
-                          {view.arize?.spansExported ?? 9} via {view.arize?.exporter || "OTLP → Arize AX"}
-                        </code>
-                      </div>
-                      {(view.arize?.traceId || rec.traceId) && (
+                    <div className="rounded-xl border border-emerald-400/25 bg-gradient-to-br from-emerald-400/[0.06] to-violet-400/[0.04] p-4 space-y-2 text-[13px]">
+                      <div className="grid sm:grid-cols-2 gap-x-4 gap-y-2">
                         <div className="flex justify-between gap-2">
-                          <span className="text-slate-400">Trace id</span>
-                          <code className="text-slate-300">
-                            {(view.arize?.traceId || rec.traceId || "").slice(0, 16)}…
+                          <span className="text-slate-400">MCP operation</span>
+                          <code className="text-emerald-200 font-semibold">{view.arize?.operation || "search_traces"}</code>
+                        </div>
+                        <div className="flex justify-between gap-2">
+                          <span className="text-slate-400">Source</span>
+                          <code className="text-slate-100">{view.arize?.source || "arize-mcp"}</code>
+                        </div>
+                        <div className="flex justify-between gap-2">
+                          <span className="text-slate-400">Spans exported</span>
+                          <code className="text-slate-100">
+                            {view.arize?.spansExported ?? 9} via {view.arize?.exporter || "OTLP → Arize AX"}
                           </code>
                         </div>
-                      )}
+                        <div className="flex justify-between gap-2">
+                          <span className="text-slate-400">Reasoning model</span>
+                          <code className="text-violet-200 font-semibold">gemini-2.5-flash</code>
+                        </div>
+                        {(view.arize?.traceId || rec.traceId) && (
+                          <div className="flex justify-between gap-2 sm:col-span-2">
+                            <span className="text-slate-400">Trace id</span>
+                            <code className="text-slate-100">
+                              {(view.arize?.traceId || rec.traceId || "").slice(0, 32)}…
+                            </code>
+                          </div>
+                        )}
+                      </div>
                       {view.arize?.note && (
-                        <p className="pt-1.5 mt-1.5 border-t border-emerald-400/10 text-slate-300 leading-relaxed">
+                        <p className="pt-2 mt-1 border-t border-emerald-400/15 text-slate-300 leading-relaxed">
                           {view.arize.note}
                         </p>
                       )}
+                      <p className="pt-2 mt-1 border-t border-emerald-400/15 text-[12px] text-slate-400 leading-relaxed">
+                        Every step in the agent loop above (plan → arize.mcp → weather → soil → market →
+                        mongo.mcp → gemini.generate → reflect → persist) emits an OpenTelemetry span and is
+                        shipped to Arize AX in real time so the agent&apos;s reasoning can be replayed,
+                        evaluated, and regression-tested by judges directly inside Arize.
+                      </p>
                     </div>
                   </div>
                 ) : null}

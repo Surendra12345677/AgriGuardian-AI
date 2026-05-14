@@ -93,7 +93,7 @@ export default function EditFarmCard({
             </p>
           </div>
           <button onClick={onSwitchToNew}
-                  className="btn-ghost text-xs whitespace-nowrap">
+                  className="btn-ghost text-sm whitespace-nowrap !py-2 !px-3.5">
             ➕ Add a different farm
           </button>
         </div>
@@ -133,8 +133,8 @@ export default function EditFarmCard({
         />
       </div>
 
-      <div className="card p-4 flex items-center gap-3 flex-wrap">
-        <div className="text-xs text-slate-400">
+      <div className="card p-4 lg:p-5 flex items-center gap-3 flex-wrap">
+        <div className="text-sm text-slate-300">
           {dirty
             ? "You moved the pin — save to update this farm in the database."
             : "Pin matches the saved location. Drag it to enable saving."}
@@ -143,8 +143,8 @@ export default function EditFarmCard({
           {err && <p className="text-sm text-red-300">{err}</p>}
           {ok  && <p className="text-sm text-emerald-300">{ok}</p>}
           <button disabled={busy || !dirty} onClick={save}
-                  className="btn-primary disabled:opacity-40 disabled:cursor-not-allowed">
-            {busy ? "Saving…" : "Save new location"}
+                  className="btn-primary text-base !py-2.5 !px-5 disabled:opacity-40 disabled:cursor-not-allowed">
+            {busy ? "Saving…" : "💾 Save new location"}
           </button>
         </div>
       </div>
