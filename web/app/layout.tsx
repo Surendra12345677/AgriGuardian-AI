@@ -14,10 +14,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body>
         <div id="top" />
         <Navbar />
-        <main className="mx-auto max-w-screen-2xl px-5 lg:px-10 xl:px-14 py-8">{children}</main>
+        <main className="mx-auto max-w-[1760px] px-5 lg:px-8 xl:px-12 py-8">{children}</main>
 
         <footer className="border-t border-white/5 mt-20 bg-[#04060a]">
-          <div className="mx-auto max-w-screen-2xl px-5 lg:px-10 xl:px-14 py-10 grid md:grid-cols-4 gap-8 text-sm">
+          <div className="mx-auto max-w-[1760px] px-5 lg:px-8 xl:px-12 py-10 grid md:grid-cols-4 gap-8 text-sm">
             <div className="md:col-span-2">
               <div className="flex items-center gap-2">
                 <span className="grid place-items-center h-8 w-8 rounded-lg
@@ -53,7 +53,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             </div>
           </div>
           <div className="border-t border-white/5">
-            <div className="mx-auto max-w-screen-2xl px-5 lg:px-10 xl:px-14 py-4 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
+            <div className="mx-auto max-w-[1760px] px-5 lg:px-8 xl:px-12 py-4 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
               <span>Built for Google Cloud · Building Agents for Real-World Challenges</span>
               <span>Apache-2.0 · Gemini 2.5 · Arize MCP · MongoDB Atlas</span>
             </div>

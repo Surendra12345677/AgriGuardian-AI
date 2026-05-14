@@ -7,9 +7,9 @@ import java.util.List;
 public record RecommendationResponse(
         String id,
         String farmId,
-        String advice,
+        String reasoning,
+        double confidenceScore,
         List<String> tasks,
         Instant createdAt,
         String traceId
 ) {}
-

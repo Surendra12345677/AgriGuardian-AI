@@ -128,8 +128,8 @@ export default function LocationPicker({
     if (mapRef.current) setTimeout(() => mapRef.current.invalidateSize(), 60);
   }, [mode]);
 
-  async function geocode(e?: React.FormEvent) {
-    e?.preventDefault();
+  async function geocode(e?: { preventDefault?: () => void }) {
+    e?.preventDefault?.();
     if (!search.trim()) return;
     setSearching(true); setStatus(null);
     try {
@@ -214,22 +214,38 @@ export default function LocationPicker({
       )}
 
       {mode === "search" && (
-        <form onSubmit={geocode} className="rounded-xl border border-white/10 bg-white/[0.02] p-3 space-y-2">
+        // NOTE: this used to be a <form>, but LocationPicker is mounted inside
+        // FarmForm's <form>. Nested <form> elements are invalid HTML and cause
+        // a React hydration error. We use a <div> + onKeyDown to keep the
+        // "press Enter to search" UX without breaking the parent form.
+        <div className="rounded-xl border border-white/10 bg-white/[0.02] p-3 space-y-2">
           <div className="flex gap-2">
             <input
               className="input flex-1"
               placeholder="e.g. Wardha, Maharashtra · 442001 · Krishi Bhavan…"
               value={search}
               onChange={e => setSearch(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  void geocode();
+                }
+              }}
             />
-            <button type="submit" disabled={searching || !search.trim()} className="btn-primary text-sm">
+            <button
+              type="button"
+              onClick={() => void geocode()}
+              disabled={searching || !search.trim()}
+              className="btn-primary text-sm"
+            >
               {searching ? "Searching…" : "Search"}
             </button>
           </div>
           <p className="text-[11px] text-slate-500">
             Powered by OpenStreetMap. Try a village, taluka, district, or 6-digit pincode.
           </p>
-        </form>
+        </div>
       )}
 
       {mode === "manual" && (

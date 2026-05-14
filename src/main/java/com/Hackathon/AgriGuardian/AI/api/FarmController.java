@@ -70,6 +70,31 @@ public class FarmController {
                 .orElseThrow(() -> new NoSuchElementException("Farm not found: " + id));
     }
 
+    /**
+     * Update an existing farm. Used by the onboarding UI when the user
+     * relocates the map pin for an already-saved farm — we want that to
+     * actually persist (and therefore re-ground every subsequent
+     * recommendation), not silently create a duplicate.
+     */
+    @PutMapping("/{id}")
+    @Operation(summary = "Replace an existing farm's profile (used to relocate the pin).")
+    public Farm update(@PathVariable String id, @Valid @RequestBody FarmRequest req) {
+        Farm existing = repo.findById(id)
+                .orElseThrow(() -> new NoSuchElementException("Farm not found: " + id));
+        existing.setFarmerName(req.farmerName());
+        existing.setContact(req.contact());
+        existing.setLatitude(req.latitude());
+        existing.setLongitude(req.longitude());
+        existing.setLandSizeAcres(req.landSizeAcres());
+        existing.setWaterAvailability(req.waterAvailability());
+        existing.setSoilType(req.soilType());
+        existing.setBudgetInr(req.budgetInr());
+        Farm saved = repo.save(existing);
+        log.info("Updated farm id={} owner={} lat={} lon={}",
+                saved.getId(), saved.getFarmerName(), saved.getLatitude(), saved.getLongitude());
+        return saved;
+    }
+
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @Operation(summary = "Delete a farm by id (idempotent — 204 even when missing).")

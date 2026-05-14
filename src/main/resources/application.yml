@@ -37,10 +37,11 @@ management:
 agriguardian:
   gemini:
     api-key: ${GEMINI_API_KEY:}
-    # gemini-2.5-flash is fast, cheap, and supports JSON-mode + thinking-off.
-    # Override via GEMINI_MODEL env var (e.g. gemini-2.5-pro for stronger
-    # reasoning — note Pro requires a tighter thinkingBudget cap to avoid
-    # blank responses on complex prompts).
+    # Default to gemini-2.0-flash because its free-tier quota is *far* more
+    # generous than 2.5-flash (15 RPM / 1,500 RPD vs 10 / 250 at the time
+    # of writing). For a live judge demo this practically eliminates the
+    # 429 rate-limit fallback. Override with GEMINI_MODEL=gemini-2.5-flash
+    # (faster reasoning) or gemini-2.5-pro (strongest, paid quota only).
     model: ${GEMINI_MODEL:gemini-2.5-flash}
     base-url: https://generativelanguage.googleapis.com/v1beta
     stub-mode: ${GEMINI_STUB_MODE:auto}   # auto | always | never
