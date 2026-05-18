@@ -6,6 +6,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 
 @Data
 @Builder
@@ -20,6 +21,12 @@ public class Recommendation {
     private String reasoning;          // human-readable rationale
     private double confidenceScore;    // 0..1 from model self-eval
     private String traceId;            // OTel trace id for Arize lookup
+    /** Aggregate Arize-style eval score (0..1) computed by AgentEvaluator. */
+    private Double evalScore;
+    /** Per-dimension eval breakdown (relevance/groundedness/agronomic_correctness/hallucination_risk). */
+    private Map<String, Object> evalDetails;
+    /** Which judge produced the eval ("gemini-llm-judge" | "rubric-deterministic"). */
+    private String evalJudge;
     @Builder.Default
     private Instant createdAt = Instant.now();
 
@@ -36,4 +43,3 @@ public class Recommendation {
         private String rationale;
     }
 }
-

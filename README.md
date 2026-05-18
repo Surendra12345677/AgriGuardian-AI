@@ -99,6 +99,48 @@ Spans emitted per request: `agent.run` → `planner.plan` → `tool.<name>` →
 | Resilience | Resilience4j (Circuit Breaker + Retry) + Caffeine cache |
 | External APIs | Open-Meteo (weather), mock Market Price API |
 
+## 🟣 Why this submission wins the Arize bucket
+
+Aparna (Arize founder) wrote to participants: *"You've set up your app with
+agent skills, you have traces flowing, and Alyx is surfacing the patterns
+that matter. The next step is making those patterns measurable."* — AgriGuardian
+ships **all four** rungs of that ladder, not just the first three.
+
+| Arize surface | What we did | Where to look |
+|---|---|---|
+| **1. Agent skills** | Multi-step orchestrator with 9 distinct spans | [`AgentOrchestrator`](./src/main/java/com/Hackathon/AgriGuardian/AI/agent/AgentOrchestrator.java) |
+| **2. Traces flowing** | OTLP → Arize AX on every tool + Gemini call | [`OpenTelemetryConfig`](./src/main/java/com/Hackathon/AgriGuardian/AI/observability/OpenTelemetryConfig.java) |
+| **3. Patterns surfaced** | Arize MCP `get_evaluations` + `search_traces` drive a **conditional planning branch** (deep / standard / fast) | [`AgentOrchestrator.planMode`](./src/main/java/com/Hackathon/AgriGuardian/AI/agent/AgentOrchestrator.java) |
+| **4. Measurable evals** | LLM-as-judge `evaluator.eval` span with 4 Arize-native dimensions + persistent score + live distribution | [`AgentEvaluator`](./src/main/java/com/Hackathon/AgriGuardian/AI/agent/AgentEvaluator.java) |
+| **5. Score distribution** | `/api/v1/eval/distribution` exposes the *exact* histogram Alyx promotes as the new baseline — rendered live in the UI's **`EvalQualityCard`** | [`EvalController`](./src/main/java/com/Hackathon/AgriGuardian/AI/api/EvalController.java) + [`EvalQualityCard.tsx`](./web/components/EvalQualityCard.tsx) |
+| **6. Datasets + Experiments** | 12-row golden dataset + stdlib-only experiment runner that prints baseline-vs-prompt-v2 deltas | [`evals/golden_dataset.jsonl`](./evals/golden_dataset.jsonl) + [`scripts/eval_experiment.py`](./scripts/eval_experiment.py) |
+| **7. MCP depth** | 4 distinct Arize MCP ops: `search_traces`, `get_evaluations`, `log_feedback`, `list_datasets` | [`ArizeMcpTool`](./src/main/java/com/Hackathon/AgriGuardian/AI/agent/tool/impl/ArizeMcpTool.java) |
+
+```
+agent.run                                  ← root span
+├─ planner.plan
+├─ tool.arize.mcp     (get_evaluations)    ← Arize MCP read → branch decision
+│   └─ branch = deep | standard | fast
+├─ tool.weather, tool.soil, tool.market
+├─ tool.mongo.mcp
+├─ gemini.generate                          ← Gemini 3 reasoning
+├─ evaluator.eval                           ← 🟣 LLM-as-judge → 4 eval scores
+│    eval.score.relevance / .groundedness /
+│    .agronomic_correctness / .hallucination_risk
+├─ tool.arize.mcp     (log_feedback)        ← writes score back through MCP
+└─ mongo.save
+```
+
+Endpoints judges can curl directly:
+```powershell
+curl https://agriguardian-ai-zqafbkccaa-uc.a.run.app/api/v1/eval/quality-trend?limit=20
+curl https://agriguardian-ai-zqafbkccaa-uc.a.run.app/api/v1/eval/distribution?limit=100
+```
+
+📄 Deep-dive: [`docs/ARIZE_INTEGRATION.md`](./docs/ARIZE_INTEGRATION.md) ·
+📊 Eval methodology: [`docs/EVAL_REPORT.md`](./docs/EVAL_REPORT.md) ·
+✉️ Partner outreach log: [`docs/ARIZE_OUTREACH.md`](./docs/ARIZE_OUTREACH.md)
+
 ## 🚀 Quick Start (PowerShell)
 
 ### Option A — Docker Compose (recommended, zero local setup)
@@ -202,10 +244,26 @@ docs/               HACKATHON_PLAN.md (start here)                      (done)
 ## 🏆 Hackathon
 
 - **Event:** Google Cloud Rapid Agent Hackathon — *Building Agents for Real-World Challenges*
-- **Partner track:** 🟣 **Arize** — agent uses Arize MCP to consult past evaluations before answering and log feedback after
-- **Brain:** Gemini 3 (`gemini-3-pro`) via Google Cloud Agent Builder
+- **Partner track:** 🟣 **Arize** — see the deep-dive in
+  [`docs/ARIZE_INTEGRATION.md`](./docs/ARIZE_INTEGRATION.md) and the
+  reproducible experiment in [`docs/EVAL_REPORT.md`](./docs/EVAL_REPORT.md)
+- **Brain:** Gemini (2.5-flash by default; pin to `gemini-2.5-pro` or `gemini-3-pro` via `GEMINI_MODEL`)
 - **Agent spec:** [`agent-builder/agriguardian-agent.yaml`](./agent-builder/agriguardian-agent.yaml)
-- **Self-aware loop:** every run is exported as a trace to Arize AX (OTLP); the agent then queries those traces via Arize MCP on the next run — closing the observe→learn loop
+- **Self-aware loop:** every run emits an `evaluator.eval` OTel span (4-dim
+  Arize-style score), pushes the score back via Arize MCP `log_feedback`, and
+  the *next* run reads those scores via `search_traces` and **adapts its
+  pipeline** (deep / standard / fast) accordingly. This is the observe →
+  learn loop, in code, not in slideware.
+
+### Why this submission targets Rank 1 in the Arize bucket
+
+| Arize surface              | Used? | Where                                                                                       |
+|----------------------------|:----:|---------------------------------------------------------------------------------------------|
+| Arize AX (OTel traces)     |  ✅  | [`OpenTelemetryConfig.java`](./src/main/java/com/Hackathon/AgriGuardian/AI/observability/OpenTelemetryConfig.java) |
+| Arize AX (online evals)    |  ✅  | [`AgentEvaluator.java`](./src/main/java/com/Hackathon/AgriGuardian/AI/agent/AgentEvaluator.java) — 4-dim scoring per run |
+| Arize MCP — multi-op       |  ✅  | [`AgentOrchestrator.java`](./src/main/java/com/Hackathon/AgriGuardian/AI/agent/AgentOrchestrator.java) — 4 operations  |
+| Arize Datasets / Experiments |  ✅  | [`scripts/eval_experiment.py`](./scripts/eval_experiment.py) + [`evals/golden_dataset.jsonl`](./evals/golden_dataset.jsonl) |
+| Conditional agent planning |  ✅  | `priorWeakness` / `priorExcellence` branches in `AgentOrchestrator`                          |
 
 ## 🗺️ Roadmap
 

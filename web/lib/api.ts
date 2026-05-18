@@ -36,6 +36,37 @@ export type DiagnoseRequest = {
 
 export type DiagnoseResponse = { raw: string };
 
+export type EvalTrendPoint = {
+  recommendationId: string;
+  farmId: string;
+  traceId?: string;
+  evalScore: number | null;
+  judge?: string;
+  createdAt: string;
+};
+
+export type EvalTrend = {
+  count: number;
+  averageScore: number | null;
+  latestScore: number | null;
+  firstScore: number | null;
+  deltaScore: number | null;
+  series: EvalTrendPoint[];
+};
+
+export type EvalDistribution = {
+  count: number;
+  scored: number;
+  averageScore: number | null;
+  medianScore: number | null;
+  p10: number | null;
+  p90: number | null;
+  stddev: number | null;
+  passRate: number | null;   // fraction with score ≥ 0.75
+  failures: number;          // count with score < 0.60
+  buckets: { label: string; lo: number; hi: number; count: number }[];
+};
+
 async function http<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, {
     ...init,
@@ -84,4 +115,6 @@ export const api = {
     http<DiagnoseResponse>("/api/v1/diagnose", {
       method: "POST", body: JSON.stringify(req),
     }),
+  evalTrend:       (limit = 20)  => http<EvalTrend>(`/api/v1/eval/quality-trend?limit=${limit}`),
+  evalDistribution:(limit = 100) => http<EvalDistribution>(`/api/v1/eval/distribution?limit=${limit}`),
 };

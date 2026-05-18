@@ -45,19 +45,30 @@ instruction: |
     3. Predict the best time to sell.
     4. Optimise pesticide usage to protect pollinators and biodiversity.
 
-  Rules:
-    - BEFORE answering, call `arize_mcp` with operation="search_traces" to
-      retrieve similar past recommendations and their evaluation scores.
-      Use that signal to choose better tools or refine your reasoning.
-    - Use the `weather` tool for any climate decision.
-    - Use the `market` tool for pricing / sell-window decisions.
-    - Use the `soil` tool to ground recommendations in soil reality.
-    - Use `mongo_mcp` to PERSIST new tasks/recommendations after the farmer
-      approves them. Ask for explicit confirmation before destructive ops.
-    - AFTER answering, call `arize_mcp` with operation="log_feedback" so
-      future runs improve.
-    - Always return structured JSON when asked for a plan, with keys:
-      { advice, tasks: [{day, action, why}], confidence: 0..1 }.
+  ARIZE-FIRST PLANNING (this is what makes the agent self-improving):
+    1. BEFORE answering, call `arize_mcp` with operation="search_traces" to
+       retrieve similar past recommendations and their evaluation scores.
+    2. Inspect the returned `averageScore`:
+         • avg < 0.60  → call `arize_mcp` with operation="get_evaluations"
+                         to fetch a deeper breakdown, and bias your reasoning
+                         away from whichever dimension scored worst
+                         (relevance / groundedness / agronomic correctness).
+         • avg ≥ 0.85  → trust the prior pattern, you may skip the
+                         self-critique step to save latency.
+    3. Use the `weather`, `soil`, and `market` tools to ground the plan.
+    4. Use `mongo_mcp` to PERSIST the plan after explicit farmer approval.
+    5. AFTER answering, call `arize_mcp` with operation="log_feedback" so the
+       NEXT run's search_traces sees the score you just produced.
+    6. Once per session, call `arize_mcp` with operation="list_datasets" so
+       the agent is aware of which golden evaluation datasets exist for
+       cross-comparison (used by the offline experiment runner).
+
+  Always return structured JSON when asked for a plan, with keys:
+    { advice, crop, tasks: [{day, action, why}], confidence: 0..1,
+      impact: { expectedRevenueInr, extraIncomeInr, yieldDeltaPct,
+                waterSavingsPct, costInr, paybackWeeks },
+      risks: [string] }
+  Ask for explicit confirmation before any destructive `mongo_mcp` op.
 
 # ── Tools the agent can call ─────────────────────────────────────────
 tools:
@@ -107,9 +118,15 @@ tools:
   # ── PARTNER-TRACK QUALIFIER (Arize MCP) ───────────────────────────────
   - name: arize_mcp
     description: >
-      Query Arize's observability backend to retrieve similar past runs,
-      evaluation scores and hallucination flags BEFORE answering, and to
-      log feedback AFTER answering so future runs improve.
+      Arize observability + evaluation platform. Four operations are used by
+      the agent loop to power the observe → learn cycle:
+        • search_traces   — retrieve similar past runs (called BEFORE planning)
+        • get_evaluations — pull per-dimension eval breakdown when prior
+                            average score < 0.60 (conditional deep context)
+        • log_feedback    — write the new run's eval score back so the next
+                            search_traces sees fresher signal (called AFTER)
+        • list_datasets   — discover golden evaluation datasets the offline
+                            experiment runner can compare prompt variants on
     mcpServer:
       url: ${MCP_ARIZE_URL}
       transport: STREAMABLE_HTTP

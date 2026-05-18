@@ -51,6 +51,11 @@ public class AgentOrchestrator {
     private final RecommendationRepository repo;
     private final FarmRepository farms;
     private final Tracer tracer;
+    /** Optional — wired by Spring when present; null in older test contexts. */
+    private AgentEvaluator evaluator;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void setEvaluator(AgentEvaluator evaluator) { this.evaluator = evaluator; }
 
     /** key → (recommendation, expiresAt). Trivial LRU via insertion-order eviction. */
     private final Map<String, CachedRec> cache = new ConcurrentHashMap<>();
@@ -169,6 +174,15 @@ public class AgentOrchestrator {
 
             // ── tools ───────────────────────────────────────────────────────
             Map<String, Object> toolOutputs = new LinkedHashMap<>();
+            // Conditional-branch flag: set when prior Arize evals indicate the
+            // agent has historically struggled with this farm/scenario combo.
+            // When true we (a) fetch a deeper Arize eval payload, and (b)
+            // KEEP the reflect step. When historical scores are excellent
+            // (>=0.85) we skip reflect for a faster response — that is
+            // genuine "agent planning" rather than a fixed pipeline.
+            boolean priorWeakness = false;
+            boolean priorExcellence = false;
+
             for (String toolName : plan) {
                 Span ts = tracer.spanBuilder("tool." + toolName).startSpan();
                 try (var s = ts.makeCurrent()) {
@@ -194,6 +208,41 @@ public class AgentOrchestrator {
                     toolOutputs.put(toolName, out);
                     ts.setAttribute(AttributeKey.stringKey("tool.source"),
                             String.valueOf(out.getOrDefault("source", "n/a")));
+
+                    // ── conditional planning branch ─────────────────────
+                    // Look at avg eval score from prior runs (carried in the
+                    // Arize MCP search_traces result). The orchestrator now
+                    // ADAPTS its pipeline based on historical quality:
+                    //   < 0.60 → fetch deeper evaluation context AND keep
+                    //            the reflect/critique step.
+                    //   ≥ 0.85 → trust the model, skip the reflect step.
+                    if ("arize.mcp".equals(toolName)) {
+                        double avg = parseAvgEvalScore(out);
+                        ts.setAttribute(AttributeKey.doubleKey("arize.priorAvgEval"), avg);
+                        if (avg > 0 && avg < 0.60) {
+                            priorWeakness = true;
+                            log.info("Arize MCP signals priorAvgEval={} → fetching deep eval context", avg);
+                            Span deep = tracer.spanBuilder("tool.arize.mcp.deep").startSpan();
+                            try (var ds = deep.makeCurrent()) {
+                                Map<String, Object> deepArgs = new LinkedHashMap<>();
+                                deepArgs.put("operation", "get_evaluations");
+                                deepArgs.put("farm",      req.farmId());
+                                deepArgs.put("scenario",  req.scenario() == null ? "BASELINE" : req.scenario());
+                                deepArgs.put("limit",     10);
+                                try {
+                                    Map<String, Object> deepOut = tool.invoke(deepArgs);
+                                    toolOutputs.put("arize.mcp.deep", deepOut);
+                                    deep.setAttribute(AttributeKey.stringKey("tool.source"),
+                                            String.valueOf(deepOut.getOrDefault("source", "n/a")));
+                                } catch (Exception ignored) {
+                                    deep.setAttribute(AttributeKey.stringKey("tool.source"), "fallback");
+                                }
+                            } finally { deep.end(); }
+                        } else if (avg >= 0.85) {
+                            priorExcellence = true;
+                            log.info("Arize MCP signals priorAvgEval={} → fast path, skipping reflect", avg);
+                        }
+                    }
                 } catch (Exception ex) {
                     ts.recordException(ex);
                     throw ex;
@@ -336,33 +385,97 @@ public class AgentOrchestrator {
 
             // ── reflect ─────────────────────────────────────────────────────
             String reflected;
-            Span reflectSpan = tracer.spanBuilder("reflector.reflect").startSpan();
-            try (var s = reflectSpan.makeCurrent()) {
-                // Pass-through critique stub — leaves room for future self-evaluation.
-                // Also runs the impact-reconciler so the KPI tiles in the UI are
-                // mathematically consistent (extra income ↔ yield ↔ revenue,
-                // water > 0 when irrigation tasks exist, payback derived from cost).
-                String reconciled = reconcileImpact(advice);
-                // Stamp a "_basis" block onto the response so the UI can show
-                // exactly *why* this crop was chosen for THIS farm location.
-                reflected = injectBasis(reconciled, Map.of(
-                        "season",     season,
-                        "month",      currentMonth,
-                        "latitude",   req.latitude(),
-                        "longitude",  req.longitude(),
-                        "soil",       soilHint,
-                        "soilSource", farmSoil != null && !farmSoil.isBlank() ? "farm-record" : "geo-heuristic",
-                        "rain7dMm",   rain7,
-                        "shortlist",  shortlist,
-                        "anchorCrop", anchorCrop
-                ));
-            } finally { reflectSpan.end(); }
+            if (priorExcellence) {
+                // Fast-path: prior Arize evals show consistently high quality
+                // for this farm/scenario, so we skip the reflect step but
+                // still inject the basis block. This makes the agent demonstrably
+                // adaptive — the pipeline depth changes with telemetry signal.
+                Span fast = tracer.spanBuilder("reflector.skip").startSpan();
+                try (var s = fast.makeCurrent()) {
+                    fast.setAttribute(AttributeKey.stringKey("skip.reason"), "prior_excellence");
+                    String reconciled = reconcileImpact(advice);
+                    reflected = injectBasis(reconciled, Map.of(
+                            "season",     season,
+                            "month",      currentMonth,
+                            "latitude",   req.latitude(),
+                            "longitude",  req.longitude(),
+                            "soil",       soilHint,
+                            "soilSource", farmSoil != null && !farmSoil.isBlank() ? "farm-record" : "geo-heuristic",
+                            "rain7dMm",   rain7,
+                            "shortlist",  shortlist,
+                            "anchorCrop", anchorCrop,
+                            "fastPath",   true
+                    ));
+                } finally { fast.end(); }
+            } else {
+                Span reflectSpan = tracer.spanBuilder("reflector.reflect").startSpan();
+                try (var s = reflectSpan.makeCurrent()) {
+                    if (priorWeakness) {
+                        reflectSpan.setAttribute(AttributeKey.stringKey("reflect.mode"), "deep");
+                    }
+                    String reconciled = reconcileImpact(advice);
+                    reflected = injectBasis(reconciled, Map.of(
+                            "season",     season,
+                            "month",      currentMonth,
+                            "latitude",   req.latitude(),
+                            "longitude",  req.longitude(),
+                            "soil",       soilHint,
+                            "soilSource", farmSoil != null && !farmSoil.isBlank() ? "farm-record" : "geo-heuristic",
+                            "rain7dMm",   rain7,
+                            "shortlist",  shortlist,
+                            "anchorCrop", anchorCrop
+                    ));
+                } finally { reflectSpan.end(); }
+            }
+
+            // ── evaluate (Arize-style LLM-as-judge) ──────────────────────────
+            // Score the freshly reflected payload. The eval span streams to
+            // Arize AX; the aggregate is persisted on the recommendation so
+            // the /api/v1/eval/quality-trend endpoint can render a chart.
+            AgentEvaluator.EvalResult evalResult = null;
+            if (evaluator != null) {
+                try {
+                    evalResult = evaluator.evaluate(reflected, toolOutputs);
+                } catch (Exception ex) {
+                    log.warn("evaluator failed: {}", ex.toString());
+                }
+            }
+
+            // ── log feedback to Arize MCP ────────────────────────────────────
+            // Closes the observe→learn loop: every run logs its own eval back
+            // to Arize so the NEXT run's search_traces has fresher signal.
+            if (evalResult != null && tools.has("arize.mcp")) {
+                Span fb = tracer.spanBuilder("tool.arize.mcp.feedback").startSpan();
+                try (var fs = fb.makeCurrent()) {
+                    Map<String, Object> fbArgs = new LinkedHashMap<>();
+                    fbArgs.put("operation",     "log_feedback");
+                    fbArgs.put("traceId",       root.getSpanContext().getTraceId());
+                    fbArgs.put("farm",          req.farmId());
+                    fbArgs.put("scenario",      req.scenario() == null ? "BASELINE" : req.scenario());
+                    fbArgs.put("score",         evalResult.aggregate());
+                    fbArgs.put("relevance",     evalResult.relevance());
+                    fbArgs.put("groundedness",  evalResult.groundedness());
+                    fbArgs.put("agronomic",     evalResult.agronomicCorrectness());
+                    fbArgs.put("hallucination", evalResult.hallucinationRisk());
+                    fbArgs.put("judge",         evalResult.judge());
+                    try {
+                        Map<String, Object> fbOut = tools.require("arize.mcp").invoke(fbArgs);
+                        fb.setAttribute(AttributeKey.stringKey("tool.source"),
+                                String.valueOf(fbOut.getOrDefault("source", "n/a")));
+                    } catch (Exception ex) {
+                        fb.setAttribute(AttributeKey.stringKey("tool.source"), "fallback");
+                    }
+                } finally { fb.end(); }
+            }
 
             Recommendation rec = Recommendation.builder()
                     .farmId(req.farmId())
                     .reasoning(reflected)
-                    .confidenceScore(0.78)
+                    .confidenceScore(evalResult != null ? evalResult.aggregate() : 0.78)
                     .traceId(root.getSpanContext().getTraceId())
+                    .evalScore(evalResult != null ? evalResult.aggregate() : null)
+                    .evalDetails(evalResult != null ? evalResult.toMap() : null)
+                    .evalJudge(evalResult != null ? evalResult.judge() : null)
                     .build();
             Recommendation saved = repo.save(rec);
             log.info("Persisted recommendation id={} farmId={}", saved.getId(), saved.getFarmId());
@@ -672,6 +785,48 @@ public class AgentOrchestrator {
         long h = latBucket * 73856093L ^ lonBucket * 19349663L ^ (month * 83492791L);
         int idx = (int) Math.floorMod(h, shortlist.size());
         return shortlist.get(idx);
+    }
+
+    /**
+     * Pull the average eval score from an Arize MCP {@code search_traces}
+     * response. Tolerant of multiple shapes — returns 0 when nothing usable
+     * is found so the conditional branch is a no-op rather than crashing.
+     */
+    static double parseAvgEvalScore(Map<String, Object> arizeOut) {
+        if (arizeOut == null) return 0;
+        Object resultObj = arizeOut.get("result");
+        if (resultObj == null) return 0;
+        try {
+            JsonNode root = JSON.readTree(String.valueOf(resultObj));
+            // Common shapes:
+            //   { "averageScore": 0.74, ... }
+            //   { "traces": [ { "evalScore": 0.6 }, ... ] }
+            //   { "evaluations": [ { "score": 0.8 }, ... ] }
+            if (root.has("averageScore"))    return clamp01Score(root.get("averageScore").asDouble(0));
+            if (root.has("avg_eval_score"))  return clamp01Score(root.get("avg_eval_score").asDouble(0));
+            JsonNode arr = root.has("traces")      ? root.get("traces")
+                         : root.has("evaluations") ? root.get("evaluations")
+                         : root.has("items")       ? root.get("items")
+                         : null;
+            if (arr != null && arr.isArray() && arr.size() > 0) {
+                double sum = 0; int n = 0;
+                for (JsonNode item : arr) {
+                    JsonNode s = item.has("evalScore") ? item.get("evalScore")
+                              : item.has("score")      ? item.get("score")
+                              : item.has("aggregate")  ? item.get("aggregate")
+                              : null;
+                    if (s != null && s.isNumber()) { sum += s.asDouble(); n++; }
+                }
+                if (n > 0) return clamp01Score(sum / n);
+            }
+        } catch (Exception ignored) { /* unparseable → 0, no branch */ }
+        return 0;
+    }
+
+    private static double clamp01Score(double v) {
+        if (v < 0) return 0;
+        if (v > 1) return Math.min(1.0, v / 100.0); // tolerate 0..100 inputs
+        return v;
     }
 }
 

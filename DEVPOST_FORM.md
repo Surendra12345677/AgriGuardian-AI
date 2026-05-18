@@ -13,7 +13,7 @@ You need these 3 things ready (everything else is done in this repo):
 
 | # | What | Where you get it |
 |---|------|------------------|
-| 1 | **Hosted project URL** | Either deploy to Cloud Run via `agent-builder/deploy.ps1`, **or** deploy `web/` to Vercel in 60 seconds (`vercel --prod`), **or** ngrok-tunnel `localhost:3000` for the duration of judging. |
+| 1 | **Hosted project URL** | Deploy to **Google Cloud Run** via `agent-builder/deploy.ps1` (already wired). Per hackathon rules §7.B.2, the hosted demo must run on Google Cloud — do not substitute competing cloud/host providers. |
 | 2 | **Demo video URL** | Record the shot list in `SUBMISSION.md` §3, upload to YouTube as **Unlisted**, paste the share link. |
 | 3 | **Open-source repo URL** | ✅ already public: `https://github.com/Surendra12345677/AgriGuardian-AI` (MIT, detected by GitHub). |
 
@@ -124,4 +124,3 @@ When you've clicked **Submit** on Devpost, share with me:
 - The video URL — I'll embed it in README and SUBMISSION.md.
 - The hosted demo URL — I'll wire it into the Hero CTA + README badges.
 
-lr
