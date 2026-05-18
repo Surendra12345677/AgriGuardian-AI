@@ -247,7 +247,7 @@ docs/               HACKATHON_PLAN.md (start here)                      (done)
 - **Partner track:** 🟣 **Arize** — see the deep-dive in
   [`docs/ARIZE_INTEGRATION.md`](./docs/ARIZE_INTEGRATION.md) and the
   reproducible experiment in [`docs/EVAL_REPORT.md`](./docs/EVAL_REPORT.md)
-- **Brain:** Gemini (2.5-flash by default; pin to `gemini-2.5-pro` or `gemini-3-pro` via `GEMINI_MODEL`)
+- **Brain:** Gemini 3 (`gemini-3-pro-preview` default; switch to `gemini-3-flash-preview` for speed, `gemini-3.1-pro-preview` for the newest 3.1 family, or `gemini-2.5-pro` as a fallback via `GEMINI_MODEL`)
 - **Agent spec:** [`agent-builder/agriguardian-agent.yaml`](./agent-builder/agriguardian-agent.yaml)
 - **Self-aware loop:** every run emits an `evaluator.eval` OTel span (4-dim
   Arize-style score), pushes the score back via Arize MCP `log_feedback`, and

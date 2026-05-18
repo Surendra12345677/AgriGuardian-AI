@@ -67,7 +67,7 @@ function Need($k) {
 
 $MongoUri    = Need "MONGODB_URI"
 $GeminiKey   = Need "GEMINI_API_KEY"
-$GeminiModel = if ($envMap.ContainsKey("GEMINI_MODEL") -and $envMap["GEMINI_MODEL"]) { $envMap["GEMINI_MODEL"] } else { "gemini-2.5-flash" }
+$GeminiModel = if ($envMap.ContainsKey("GEMINI_MODEL") -and $envMap["GEMINI_MODEL"]) { $envMap["GEMINI_MODEL"] } else { "gemini-3-pro-preview" }
 $ArizeKey    = Need "ARIZE_API_KEY"
 $ArizeSpace  = Need "ARIZE_SPACE_ID"
 $ArizeOtlp   = if ($envMap.ContainsKey("ARIZE_OTLP_ENDPOINT") -and $envMap["ARIZE_OTLP_ENDPOINT"]) { $envMap["ARIZE_OTLP_ENDPOINT"] } else { "https://otlp.arize.com/v1" }

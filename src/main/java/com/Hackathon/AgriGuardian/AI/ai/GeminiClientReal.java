@@ -174,8 +174,8 @@ public class GeminiClientReal implements GeminiClient {
                     + "Verify at https://console.cloud.google.com/apis/credentials and "
                     + "https://console.cloud.google.com/billing. Server response: " + body;
             case 404 -> "Gemini model '" + cfg.getModel() + "' not found (HTTP 404). "
-                    + "Set GEMINI_MODEL to a model your key can access — try 'gemini-2.5-flash' "
-                    + "or 'gemini-2.0-flash'. Server response: " + body;
+                    + "Set GEMINI_MODEL to a model your key can access — try 'gemini-3-pro-preview', "
+                    + "'gemini-3-flash-preview', or 'gemini-2.5-pro' as a fallback. Server response: " + body;
             case 429 -> "Gemini quota exceeded (HTTP 429) after " + MAX_ATTEMPTS + " retries. "
                     + "Even with billing, per-minute and per-day limits apply. "
                     + "Check quotas at https://console.cloud.google.com/iam-admin/quotas "

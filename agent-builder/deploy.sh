@@ -69,7 +69,7 @@ need MONGODB_URI
 need GEMINI_API_KEY
 need ARIZE_API_KEY
 need ARIZE_SPACE_ID
-GEMINI_MODEL="${GEMINI_MODEL:-gemini-2.5-flash}"
+GEMINI_MODEL="${GEMINI_MODEL:-gemini-3-pro-preview}"
 ARIZE_OTLP_ENDPOINT="${ARIZE_OTLP_ENDPOINT:-https://otlp.arize.com/v1}"
 
 echo "==> Project=$PROJECT_ID  Region=$REGION"

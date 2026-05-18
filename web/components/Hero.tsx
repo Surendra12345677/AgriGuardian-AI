@@ -76,7 +76,7 @@ export default function Hero() {
               <Trace label="reflector.reflect"   ms="22" />
               <Trace label="mongo.save"          ms="38" />
               <div className="pt-2 mt-2 border-t border-white/5 flex items-center justify-between text-[11px]">
-                <span className="text-slate-500">9 spans · gemini-2.5-flash</span>
+                <span className="text-slate-500">9 spans · gemini-3-pro-preview</span>
                 <span className="text-emerald-300 font-semibold">+₹38,400 projected</span>
               </div>
             </div>

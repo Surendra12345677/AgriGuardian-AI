@@ -23,7 +23,7 @@ public class AgriGuardianProperties {
         /** API key — blank ⇒ stub mode kicks in. */
         private String apiKey = "";
         @NotBlank
-        private String model = "gemini-3-pro";
+        private String model = "gemini-3-pro-preview";
         private String baseUrl = "https://generativelanguage.googleapis.com/v1beta";
         /** auto | always | never. */
         private String stubMode = "auto";
