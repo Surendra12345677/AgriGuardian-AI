@@ -6,6 +6,7 @@ import FarmForm from "@/components/FarmForm";
 import FarmList from "@/components/FarmList";
 import EditFarmCard from "@/components/EditFarmCard";
 import AgentPanel from "@/components/AgentPanel";
+import { EvalQualityCard } from "@/components/EvalQualityCard";
 import Hero from "@/components/Hero";
 import PartnerStrip from "@/components/PartnerStrip";
 import HowItWorks from "@/components/HowItWorks";
@@ -182,7 +183,14 @@ export default function HomePage() {
           action={<LanguagePill lang={lang} onChange={setLang} />}
         >
           {selected ? (
-            <AgentPanel farm={selected} language={lang} onLanguageChange={setLang} />
+            <div className="grid lg:grid-cols-3 gap-4">
+              <div className="lg:col-span-2">
+                <AgentPanel farm={selected} language={lang} onLanguageChange={setLang} />
+              </div>
+              <div className="lg:col-span-1">
+                <EvalQualityCard />
+              </div>
+            </div>
           ) : (
             <NeedFarmCard onGo={() => navigate("onboard")} label="Save a farm first to enable the planner." />
           )}

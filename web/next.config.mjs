@@ -7,12 +7,16 @@ const nextConfig = {
   // lint/type warning — surface them in dev, ignore at build time.
   eslint:     { ignoreDuringBuilds: true },
   typescript: { ignoreBuildErrors: true },
-  // Proxy /api/* to the Spring Boot backend so the browser never hits CORS.
-  // Override BACKEND_URL when running outside docker (e.g. http://localhost:8080).
-  async rewrites() {
-    const backend = process.env.BACKEND_URL || "http://localhost:8080";
-    return [{ source: "/api/:path*", destination: `${backend}/api/:path*` }];
-  },
+  // NOTE: /api/* is proxied to the Spring Boot backend by a runtime
+  // Route Handler at app/api/[...path]/route.ts (NOT by `rewrites()`).
+  //
+  // Why: `rewrites()` is evaluated at `next build` time and bakes the
+  // resolved destination URL into the routes manifest. On Cloud Run the
+  // image is built by Cloud Build without BACKEND_URL in scope, which
+  // would freeze the destination as "http://localhost:8080/..." and
+  // every API call would 503 — even after `gcloud run services update
+  // --update-env-vars BACKEND_URL=...`. The Route Handler reads the env
+  // var per request, so deploys + env-var updates take effect live.
   experimental: { typedRoutes: false }
 };
 export default nextConfig;
