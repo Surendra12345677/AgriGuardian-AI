@@ -229,7 +229,7 @@ export default function AgentPanel({
               <>
                 <div className="mt-3 grid grid-cols-3 gap-2 text-center">
                   <Metric k="Latency" v={latencyMs ? `${latencyMs}ms` : "—"} />
-                  <Metric k="Model"   v={view._source === "offline-fallback" ? "offline" : "gemini-2.5-flash"} />
+                  <Metric k="Model"   v={view._source === "offline-fallback" ? "offline" : "gemini-3-pro-preview"} />
                   <Metric k="Tools"   v="5" />
                 </div>
                 {view.impact && <div className="mt-4"><ImpactDashboard impact={view.impact} /></div>}
@@ -391,7 +391,7 @@ export default function AgentPanel({
                         </div>
                         <div className="flex justify-between gap-2">
                           <span className="text-slate-400">Reasoning model</span>
-                          <code className="text-violet-200 font-semibold">gemini-2.5-flash</code>
+                          <code className="text-violet-200 font-semibold">gemini-3-pro-preview</code>
                         </div>
                         {(view.arize?.traceId || rec.traceId) && (
                           <div className="flex justify-between gap-2 sm:col-span-2">

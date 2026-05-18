@@ -28,8 +28,9 @@ description: >
 
 # ── Reasoning model ──────────────────────────────────────────────────
 model:
-  name: gemini-3-pro
-  # gemini-3-flash also acceptable for lower-cost demo
+  name: gemini-3-pro-preview
+  # gemini-3-flash-preview also acceptable for lower-cost demo;
+  # gemini-3.1-pro-preview for the newest 3.1 family.
   generationConfig:
     temperature: 0.4
     topP: 0.95
