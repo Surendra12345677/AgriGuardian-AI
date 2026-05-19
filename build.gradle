@@ -23,7 +23,7 @@ ext {
 	// pulls in. Mismatched versions caused OtlpHttpSpanExporterBuilder
 	// to crash on a missing HttpExporterBuilder constructor at startup.
 	otelVersion = '1.55.0'
-	resilience4jVersion = '2.2.0'
+	resilience4jVersion = '2.4.0'
 }
 
 dependencies {
