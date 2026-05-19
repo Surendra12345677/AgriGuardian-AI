@@ -52,6 +52,13 @@ agriguardian:
     # `gemini-3.1-pro-preview` (latest 3.1 family), or `gemini-2.5-pro`
     # as a safe fallback if Gemini 3 access is revoked on your key.
     model: ${GEMINI_MODEL:gemini-3-pro-preview}
+    # Ordered fallback chain — tried in order if the primary model returns
+    # 404 (model not on this project), 429 (quota), or 5xx after retries.
+    # Guarantees we keep serving LIVE Gemini results (never the offline
+    # deterministic plan) as long as ANY one of these models is reachable
+    # for the configured API key. Override with comma-separated env var
+    # GEMINI_FALLBACK_MODELS=gemini-2.5-pro,gemini-2.5-flash,gemini-2.0-flash
+    fallback-models: ${GEMINI_FALLBACK_MODELS:gemini-3-flash-preview,gemini-2.5-pro,gemini-2.5-flash,gemini-2.0-flash}
     base-url: https://generativelanguage.googleapis.com/v1beta
     stub-mode: ${GEMINI_STUB_MODE:auto}   # auto | always | never
     timeout-seconds: 30

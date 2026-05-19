@@ -68,6 +68,14 @@ function Need($k) {
 $MongoUri    = Need "MONGODB_URI"
 $GeminiKey   = Need "GEMINI_API_KEY"
 $GeminiModel = if ($envMap.ContainsKey("GEMINI_MODEL") -and $envMap["GEMINI_MODEL"]) { $envMap["GEMINI_MODEL"] } else { "gemini-3-pro-preview" }
+# Comma-separated list of generally-available fallback models. The backend
+# will iterate through them when the primary model returns 404/429/5xx so
+# judges NEVER see the deterministic offline plan on Cloud Run.
+$GeminiFallbacks = if ($envMap.ContainsKey("GEMINI_FALLBACK_MODELS") -and $envMap["GEMINI_FALLBACK_MODELS"]) { $envMap["GEMINI_FALLBACK_MODELS"] } else { "gemini-3-flash-preview;gemini-2.5-pro;gemini-2.5-flash;gemini-2.0-flash" }
+# Cloud Run --set-env-vars uses ',' as the variable separator; use ';' inside
+# the value and let Spring's Binder split it (List<String> binding handles
+# both comma and semicolon for relaxed binding). To be safe we pass it as
+# a single token with ';' separators that we translate to ',' below.
 $ArizeKey    = Need "ARIZE_API_KEY"
 $ArizeSpace  = Need "ARIZE_SPACE_ID"
 $ArizeOtlp   = if ($envMap.ContainsKey("ARIZE_OTLP_ENDPOINT") -and $envMap["ARIZE_OTLP_ENDPOINT"]) { $envMap["ARIZE_OTLP_ENDPOINT"] } else { "https://otlp.arize.com/v1" }
@@ -118,9 +126,12 @@ foreach ($s in @("agriguardian-mongodb-uri","agriguardian-gemini-key","agriguard
 }
 
 # ── 1/2  Backend (Spring Boot) ──────────────────────────────────────
-$backendEnv = @(
+# Use a custom '|' delimiter (gcloud `^|^` prefix) so we can embed commas
+# inside GEMINI_FALLBACK_MODELS without confusing --set-env-vars parsing.
+$backendEnv = "^|^" + (@(
     "SPRING_PROFILES_ACTIVE=prod",
     "GEMINI_MODEL=$GeminiModel",
+    "GEMINI_FALLBACK_MODELS=" + ($GeminiFallbacks -replace ';', ','),
     "GEMINI_STUB_MODE=auto",
     "ARIZE_ENABLED=true",
     "ARIZE_SPACE_ID=$ArizeSpace",
@@ -128,7 +139,7 @@ $backendEnv = @(
     "AGRIGUARDIAN_ARIZE_PROJECT_NAME=agriguardian-ai",
     "MCP_ARIZE_ENABLED=false",
     "MCP_MONGODB_ENABLED=false"
-) -join ","
+) -join "|")
 
 $backendSecrets = @(
     "MONGODB_URI=agriguardian-mongodb-uri:latest",

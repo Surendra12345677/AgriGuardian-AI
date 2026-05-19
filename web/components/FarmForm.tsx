@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { api, type Farm } from "@/lib/api";
 import LocationPicker from "./LocationPicker";
+import NumericField from "./NumericField";
+import Select from "./Select";
 
 const WATER = ["LOW", "MEDIUM", "HIGH"] as const;
 const SOIL  = ["LOAM", "CLAY", "SANDY", "BLACK", "RED"] as const;
@@ -108,24 +110,22 @@ export default function FarmForm({
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <Field label="Land (acres)">
-            <input className="input" type="number" step="0.1" min="0.1" value={form.landSizeAcres}
-                   onChange={e => set("landSizeAcres", Number(e.target.value))} />
+            <NumericField value={form.landSizeAcres} min={0.1} step={0.1}
+                          onChange={n => set("landSizeAcres", n)} />
           </Field>
           <Field label="Budget (INR)">
-            <input className="input" type="number" step="500" min="0" value={form.budgetInr}
-                   onChange={e => set("budgetInr", Number(e.target.value))} />
+            <NumericField value={form.budgetInr} min={0} step={500}
+                          onChange={n => set("budgetInr", n)} />
           </Field>
           <Field label="Water availability">
-            <select className="input" value={form.waterAvailability}
-                    onChange={e => set("waterAvailability", e.target.value)}>
-              {WATER.map(w => <option key={w}>{w}</option>)}
-            </select>
+            <Select value={form.waterAvailability as (typeof WATER)[number]}
+                    options={WATER}
+                    onChange={v => set("waterAvailability", v)} />
           </Field>
           <Field label="Soil type">
-            <select className="input" value={form.soilType}
-                    onChange={e => set("soilType", e.target.value)}>
-              {SOIL.map(s => <option key={s}>{s}</option>)}
-            </select>
+            <Select value={form.soilType as (typeof SOIL)[number]}
+                    options={SOIL}
+                    onChange={v => set("soilType", v)} />
           </Field>
         </div>
       </div>

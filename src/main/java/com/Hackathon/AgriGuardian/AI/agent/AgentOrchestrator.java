@@ -102,8 +102,55 @@ public class AgentOrchestrator {
         return dropped;
     }
 
+    /**
+     * Serialize an inbound {@link RecommendationRequest} into a plain Map
+     * so it can be persisted on the {@link Recommendation} document and
+     * later replayed by the Agent Feedback Loop endpoint. Only the inputs
+     * the orchestrator actually consumes are captured — never any secrets.
+     */
+    public static Map<String, Object> snapshotOf(RecommendationRequest req) {
+        if (req == null) return Map.of();
+        java.util.LinkedHashMap<String, Object> snap = new java.util.LinkedHashMap<>();
+        snap.put("farmId",        req.farmId());
+        snap.put("latitude",      req.latitude());
+        snap.put("longitude",     req.longitude());
+        snap.put("preferredCrop", req.preferredCrop());
+        snap.put("language",      req.language());
+        snap.put("scenario",      req.scenario());
+        return snap;
+    }
+
+    /**
+     * Replay a previously-stored request snapshot through the agent loop.
+     * Always bypasses the cache (a replay must hit a fresh trace so the
+     * new eval score is comparable to the original). Used by the Agent
+     * Feedback Loop endpoint to turn a failed trace into a regression test.
+     */
+    public Recommendation replay(Map<String, Object> snapshot) {
+        if (snapshot == null || snapshot.isEmpty()) {
+            throw new IllegalArgumentException("Cannot replay an empty request snapshot");
+        }
+        RecommendationRequest req = new RecommendationRequest(
+                asString(snapshot.get("farmId")),
+                asDouble(snapshot.get("latitude")),
+                asDouble(snapshot.get("longitude")),
+                asString(snapshot.get("preferredCrop")),
+                asString(snapshot.get("language")),
+                asString(snapshot.get("scenario")),
+                Boolean.TRUE   // force live — regression replays must not hit the cache
+        );
+        return run(req);
+    }
+
+    private static String asString(Object o) { return o == null ? null : String.valueOf(o); }
+    private static Double asDouble(Object o) {
+        if (o == null) return null;
+        if (o instanceof Number n) return n.doubleValue();
+        try { return Double.parseDouble(String.valueOf(o)); }
+        catch (NumberFormatException e) { return null; }
+    }
+
     public Recommendation run(RecommendationRequest req) {
-        // ── cache short-circuit (saves Gemini free-tier quota during demo) ──
         // IMPORTANT: we only cache *live* Gemini results. An offline-fallback
         // result is never cached, otherwise a single 429 during the demo
         // would pin every subsequent identical request to the offline plan
@@ -476,6 +523,10 @@ public class AgentOrchestrator {
                     .evalScore(evalResult != null ? evalResult.aggregate() : null)
                     .evalDetails(evalResult != null ? evalResult.toMap() : null)
                     .evalJudge(evalResult != null ? evalResult.judge() : null)
+                    // Snapshot the inbound request so the Agent Feedback Loop
+                    // endpoint can replay this exact call later, even if the
+                    // user has since deleted the farm or changed its profile.
+                    .requestSnapshot(snapshotOf(req))
                     .build();
             Recommendation saved = repo.save(rec);
             log.info("Persisted recommendation id={} farmId={}", saved.getId(), saved.getFarmId());
