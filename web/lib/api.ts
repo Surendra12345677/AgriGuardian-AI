@@ -117,4 +117,46 @@ export const api = {
     }),
   evalTrend:       (limit = 20)  => http<EvalTrend>(`/api/v1/eval/quality-trend?limit=${limit}`),
   evalDistribution:(limit = 100) => http<EvalDistribution>(`/api/v1/eval/distribution?limit=${limit}`),
+
+  // ── Agent Feedback Loop — failed traces → regression tests ──────
+  feedbackFailures: (threshold = 0.6, limit = 20) =>
+    http<FeedbackFailures>(`/api/v1/feedback/failures?threshold=${threshold}&limit=${limit}`),
+  feedbackAnnotate: (id: string, body: { failureMode?: string; expectedBehavior?: string }) =>
+    http<FeedbackFailure>(`/api/v1/feedback/${id}/annotate`, {
+      method: "POST", body: JSON.stringify(body),
+    }),
+  feedbackReplay: (id: string) =>
+    http<FeedbackReplay>(`/api/v1/feedback/${id}/replay`, { method: "POST" }),
+};
+
+/* ── Agent Feedback Loop types ──────────────────────────────────── */
+export type FeedbackFailure = {
+  id: string;
+  farmId: string;
+  traceId?: string;
+  evalScore: number | null;
+  evalJudge?: string;
+  failureMode?: string | null;
+  expectedBehavior?: string | null;
+  replayOfId?: string | null;
+  requestSnapshot?: Record<string, unknown> | null;
+  createdAt: string;
+};
+
+export type FeedbackFailures = {
+  threshold: number;
+  count: number;
+  failureModeTaxonomy: string[];
+  failures: FeedbackFailure[];
+};
+
+export type FeedbackReplay = {
+  originalId: string;
+  originalScore: number | null;
+  replayId: string;
+  replayScore: number | null;
+  delta: number | null;
+  improved: boolean;
+  failureMode?: string | null;
+  expectedBehavior?: string | null;
 };

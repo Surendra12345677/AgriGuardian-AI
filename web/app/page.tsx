@@ -7,6 +7,7 @@ import FarmList from "@/components/FarmList";
 import EditFarmCard from "@/components/EditFarmCard";
 import AgentPanel from "@/components/AgentPanel";
 import { EvalQualityCard } from "@/components/EvalQualityCard";
+import FeedbackLoop from "@/components/FeedbackLoop";
 import Hero from "@/components/Hero";
 import PartnerStrip from "@/components/PartnerStrip";
 import HowItWorks from "@/components/HowItWorks";
@@ -189,6 +190,9 @@ export default function HomePage() {
               </div>
               <div className="lg:col-span-1">
                 <EvalQualityCard />
+              </div>
+              <div className="lg:col-span-3">
+                <FeedbackLoop />
               </div>
             </div>
           ) : (

@@ -70,6 +70,10 @@ need GEMINI_API_KEY
 need ARIZE_API_KEY
 need ARIZE_SPACE_ID
 GEMINI_MODEL="${GEMINI_MODEL:-gemini-3-pro-preview}"
+# Comma-separated fallback chain — the backend iterates through these when
+# the primary model returns 404 / 429 / 5xx so judges never see the
+# deterministic offline plan on Cloud Run.
+GEMINI_FALLBACK_MODELS="${GEMINI_FALLBACK_MODELS:-gemini-3-flash-preview,gemini-2.5-pro,gemini-2.5-flash,gemini-2.0-flash}"
 ARIZE_OTLP_ENDPOINT="${ARIZE_OTLP_ENDPOINT:-https://otlp.arize.com/v1}"
 
 echo "==> Project=$PROJECT_ID  Region=$REGION"
@@ -135,7 +139,9 @@ for role in \
 done
 
 # ── 1/2  Backend (Spring Boot) ──────────────────────────────────────
-BACKEND_ENV="SPRING_PROFILES_ACTIVE=prod,GEMINI_MODEL=$GEMINI_MODEL,GEMINI_STUB_MODE=auto,ARIZE_ENABLED=true,ARIZE_SPACE_ID=$ARIZE_SPACE_ID,ARIZE_OTLP_ENDPOINT=$ARIZE_OTLP_ENDPOINT,AGRIGUARDIAN_ARIZE_PROJECT_NAME=agriguardian-ai,MCP_ARIZE_ENABLED=false,MCP_MONGODB_ENABLED=false"
+# Use a custom delimiter (gcloud `^|^` prefix) so commas inside
+# GEMINI_FALLBACK_MODELS don't break --set-env-vars parsing.
+BACKEND_ENV="^|^SPRING_PROFILES_ACTIVE=prod|GEMINI_MODEL=$GEMINI_MODEL|GEMINI_FALLBACK_MODELS=$GEMINI_FALLBACK_MODELS|GEMINI_STUB_MODE=auto|ARIZE_ENABLED=true|ARIZE_SPACE_ID=$ARIZE_SPACE_ID|ARIZE_OTLP_ENDPOINT=$ARIZE_OTLP_ENDPOINT|AGRIGUARDIAN_ARIZE_PROJECT_NAME=agriguardian-ai|MCP_ARIZE_ENABLED=false|MCP_MONGODB_ENABLED=false"
 BACKEND_SECRETS="MONGODB_URI=agriguardian-mongodb-uri:latest,SPRING_DATA_MONGODB_URI=agriguardian-mongodb-uri:latest,GEMINI_API_KEY=agriguardian-gemini-key:latest,ARIZE_API_KEY=agriguardian-arize-key:latest"
 
 echo "==> [1/2] Building + deploying BACKEND ($BACKEND_SERVICE)"
