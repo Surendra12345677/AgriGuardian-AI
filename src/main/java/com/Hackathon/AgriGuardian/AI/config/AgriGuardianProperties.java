@@ -64,10 +64,46 @@ public class AgriGuardianProperties {
 
     @Data
     public static class Market {
-        /** When true, no external HTTP call is made; uses config-driven in-memory pricing. */
-        private boolean useMock = true;
-        /** Reserved for a future real provider (e.g. AGMARKNET). */
+        /**
+         * When {@code false} (the default for production), the market tool calls
+         * Gemini to obtain a live, knowledge-grounded price quote for the crop.
+         * Set to {@code true} in CI / offline dev to use the deterministic
+         * config-driven seasonal simulation instead.
+         */
+        private boolean useMock = false;
+        /** Reserved for a future direct REST provider (e.g. AGMARKNET). */
         private String baseUrl = "";
+
+        /**
+         * System prompt sent to Gemini when {@code use-mock=false}.
+         * Overridable via {@code agriguardian.market.live-price-system-prompt} in YAML
+         * or by setting the env var {@code MARKET_LIVE_SYSTEM_PROMPT}.
+         */
+        private String livePriceSystemPrompt =
+                "You are an agricultural commodity market analyst. "
+                + "You have up-to-date knowledge of Indian mandi (wholesale market) prices, "
+                + "global commodity exchanges, and seasonal crop price patterns. "
+                + "Always respond with only a single valid JSON object — no markdown, no explanation.";
+
+        /**
+         * User-prompt template for the live Gemini market call.
+         * Use {@code {crop}} and {@code {date}} as substitution tokens.
+         * Overridable via {@code agriguardian.market.live-price-user-prompt-template}.
+         */
+        private String livePriceUserPromptTemplate =
+                "What is the current wholesale market price (INR per quintal) for {crop} in India as of {date}? "
+                + "Provide the short-term price trend (rising, stable, or falling), the month when the crop typically "
+                + "commands peak prices, and the recommended sell window (two consecutive month names). "
+                + "Return ONLY this JSON structure (no other text):\n"
+                + "{\n"
+                + "  \"crop\": \"{crop}\",\n"
+                + "  \"pricePerQuintalINR\": <integer>,\n"
+                + "  \"trend\": \"rising|stable|falling\",\n"
+                + "  \"peakMonth\": \"<MONTH_NAME_UPPERCASE>\",\n"
+                + "  \"recommendedSellWindow\": \"<MONTH>–<MONTH>\",\n"
+                + "  \"asOfDate\": \"{date}\",\n"
+                + "  \"marketInsight\": \"<one sentence summarising the current demand/supply driver>\"\n"
+                + "}";
 
         /**
          * Fallback ₹/quintal when a crop is not listed in {@link #basePrices}.

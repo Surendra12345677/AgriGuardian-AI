@@ -9,8 +9,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class MarketPriceToolTest {
 
+    /** Build the tool in mock mode with a null GeminiClient — live path never called. */
     private MarketPriceTool tool() {
-        return new MarketPriceTool(new AgriGuardianProperties());
+        AgriGuardianProperties props = new AgriGuardianProperties();
+        props.getMarket().setUseMock(true);   // force mock so no Gemini call
+        return new MarketPriceTool(props, (sys, user, ctx) -> {
+            throw new UnsupportedOperationException("Gemini should not be called in mock mode");
+        });
     }
 
     @Test
@@ -42,6 +47,39 @@ class MarketPriceToolTest {
         var a = t.invoke(Map.of("crop", "rice", "date", "2026-10-01"));
         var b = t.invoke(Map.of("crop", "rice", "date", "2026-10-01"));
         assertThat(a).isEqualTo(b);
+    }
+
+    @Test
+    void invoke_live_usesGeminiAndReturnsSourceGeminiLive() {
+        // Simulate a Gemini response with a valid JSON market quote.
+        AgriGuardianProperties props = new AgriGuardianProperties();
+        props.getMarket().setUseMock(false);
+        String fakeGeminiJson = """
+                {"crop":"wheat","pricePerQuintalINR":2480,"trend":"rising",
+                 "peakMonth":"APRIL","recommendedSellWindow":"MARCH–APRIL",
+                 "asOfDate":"2026-05-25","marketInsight":"Demand uptick ahead of rabi procurement."}
+                """;
+        MarketPriceTool liveTool = new MarketPriceTool(props, (sys, user, ctx) -> fakeGeminiJson);
+
+        Map<String, Object> out = liveTool.invoke(Map.of("crop", "wheat", "date", "2026-05-25"));
+
+        assertThat(out).containsEntry("source", "gemini-live")
+                       .containsEntry("trend", "rising")
+                       .containsKey("marketInsight");
+        assertThat((Integer) out.get("pricePerQuintalINR")).isEqualTo(2480);
+    }
+
+    @Test
+    void invoke_live_fallsBackToMockWhenGeminiFails() {
+        AgriGuardianProperties props = new AgriGuardianProperties();
+        props.getMarket().setUseMock(false);
+        MarketPriceTool liveTool = new MarketPriceTool(props,
+                (sys, user, ctx) -> { throw new RuntimeException("Gemini quota exceeded"); });
+
+        Map<String, Object> out = liveTool.invoke(Map.of("crop", "rice", "date", "2026-10-01"));
+
+        assertThat(out).containsEntry("source", "mock-fallback");
+        assertThat((Integer) out.get("pricePerQuintalINR")).isGreaterThan(0);
     }
 }
 
