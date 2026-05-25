@@ -93,15 +93,19 @@ agriguardian:
     base-url: https://api.open-meteo.com/v1
   market:
     # ── Market price configuration ─────────────────────────────────────────
-    # No values are hardcoded in Java. All prices, peak months, and algorithm
-    # parameters live here and can be overridden via env vars at runtime.
-    use-mock: ${MARKET_USE_MOCK:true}
-    # Fallback ₹/quintal when the requested crop is not in base-prices.
+    # use-mock: false → call Gemini at runtime for a knowledge-grounded price
+    #                   quote (default for production / Cloud Run).
+    # use-mock: true  → use the config-driven seasonal simulation below
+    #                   (CI, offline dev, 100 % deterministic evals).
+    use-mock: ${MARKET_USE_MOCK:false}
+    # Fallback ₹/quintal when the requested crop is not in base-prices (mock mode only).
     default-fallback-price-inr: ${MARKET_DEFAULT_PRICE:2000}
-    # Seasonal swing: 0.12 = ±12 % from base price at peak / off-peak.
+    # Seasonal swing amplitude as a fraction of base price (mock mode only).
     seasonal-amplitude: ${MARKET_SEASONAL_AMPLITUDE:0.12}
-    # Base prices ₹/quintal.  Override individual crops, e.g.:
-    #   AGRIGUARDIAN_MARKET_BASE_PRICES_WHEAT=2600
+    # Gemini prompt overrides — leave blank to use the built-in defaults.
+    live-price-system-prompt: ${MARKET_LIVE_SYSTEM_PROMPT:}
+    live-price-user-prompt-template: ${MARKET_LIVE_USER_PROMPT:}
+    # Base prices ₹/quintal (mock / fallback only).
     base-prices:
       wheat:     ${MARKET_PRICE_WHEAT:2425}
       rice:      ${MARKET_PRICE_RICE:2200}
@@ -193,4 +197,6 @@ spring:
 agriguardian:
   gemini:
     stub-mode: always
+  market:
+    use-mock: true   # deterministic evals — never call Gemini in tests
 
