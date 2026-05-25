@@ -92,8 +92,51 @@ agriguardian:
   weather:
     base-url: https://api.open-meteo.com/v1
   market:
-    # Mock market price source (deterministic + trend simulation)
-    use-mock: true
+    # ── Market price configuration ─────────────────────────────────────────
+    # No values are hardcoded in Java. All prices, peak months, and algorithm
+    # parameters live here and can be overridden via env vars at runtime.
+    use-mock: ${MARKET_USE_MOCK:true}
+    # Fallback ₹/quintal when the requested crop is not in base-prices.
+    default-fallback-price-inr: ${MARKET_DEFAULT_PRICE:2000}
+    # Seasonal swing: 0.12 = ±12 % from base price at peak / off-peak.
+    seasonal-amplitude: ${MARKET_SEASONAL_AMPLITUDE:0.12}
+    # Base prices ₹/quintal.  Override individual crops, e.g.:
+    #   AGRIGUARDIAN_MARKET_BASE_PRICES_WHEAT=2600
+    base-prices:
+      wheat:     ${MARKET_PRICE_WHEAT:2425}
+      rice:      ${MARKET_PRICE_RICE:2200}
+      maize:     ${MARKET_PRICE_MAIZE:2090}
+      soybean:   ${MARKET_PRICE_SOYBEAN:4600}
+      cotton:    ${MARKET_PRICE_COTTON:7500}
+      sugarcane: ${MARKET_PRICE_SUGARCANE:340}
+      onion:     ${MARKET_PRICE_ONION:1800}
+      tomato:    ${MARKET_PRICE_TOMATO:1500}
+      potato:    ${MARKET_PRICE_POTATO:1200}
+      groundnut: ${MARKET_PRICE_GROUNDNUT:6377}
+      watermelon: ${MARKET_PRICE_WATERMELON:1950}
+      muskmelon:  ${MARKET_PRICE_MUSKMELON:1750}
+      sunflower:  ${MARKET_PRICE_SUNFLOWER:5800}
+      mustard:    ${MARKET_PRICE_MUSTARD:5650}
+      chickpea:   ${MARKET_PRICE_CHICKPEA:5440}
+      lentil:     ${MARKET_PRICE_LENTIL:6200}
+    # Peak-demand month per crop (1=Jan … 12=Dec).
+    peak-months:
+      wheat:      ${MARKET_PEAK_WHEAT:4}
+      rice:       ${MARKET_PEAK_RICE:10}
+      maize:      ${MARKET_PEAK_MAIZE:11}
+      soybean:    ${MARKET_PEAK_SOYBEAN:10}
+      cotton:     ${MARKET_PEAK_COTTON:12}
+      sugarcane:  ${MARKET_PEAK_SUGARCANE:2}
+      onion:      ${MARKET_PEAK_ONION:6}
+      tomato:     ${MARKET_PEAK_TOMATO:8}
+      potato:     ${MARKET_PEAK_POTATO:3}
+      groundnut:  ${MARKET_PEAK_GROUNDNUT:11}
+      watermelon: ${MARKET_PEAK_WATERMELON:5}
+      muskmelon:  ${MARKET_PEAK_MUSKMELON:5}
+      sunflower:  ${MARKET_PEAK_SUNFLOWER:4}
+      mustard:    ${MARKET_PEAK_MUSTARD:3}
+      chickpea:   ${MARKET_PEAK_CHICKPEA:3}
+      lentil:     ${MARKET_PEAK_LENTIL:4}
 
 logging:
   level:
