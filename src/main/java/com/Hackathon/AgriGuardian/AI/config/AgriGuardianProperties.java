@@ -64,10 +64,75 @@ public class AgriGuardianProperties {
 
     @Data
     public static class Market {
-        /** When true, no external HTTP call is made; uses deterministic in-memory pricing. */
+        /** When true, no external HTTP call is made; uses config-driven in-memory pricing. */
         private boolean useMock = true;
         /** Reserved for a future real provider (e.g. AGMARKNET). */
         private String baseUrl = "";
+
+        /**
+         * Fallback ₹/quintal when a crop is not listed in {@link #basePrices}.
+         * Overridable via {@code MARKET_DEFAULT_PRICE} env var.
+         */
+        private int defaultFallbackPriceInr = 2000;
+
+        /**
+         * Seasonal price-swing amplitude as a fraction of base price.
+         * 0.12 → ±12 % from base at peak / opposite-peak.
+         * Overridable via {@code MARKET_SEASONAL_AMPLITUDE} env var.
+         */
+        private double seasonalAmplitude = 0.12;
+
+        /**
+         * Base ₹/quintal keyed by <em>lowercase</em> crop name.
+         * Every entry can be overridden via {@code application.yml} or at
+         * runtime via {@code agriguardian.market.base-prices.wheat=2500} etc.
+         */
+        private java.util.Map<String, Integer> basePrices = new java.util.LinkedHashMap<>(
+                java.util.Map.ofEntries(
+                        java.util.Map.entry("wheat",     2425),
+                        java.util.Map.entry("rice",      2200),
+                        java.util.Map.entry("maize",     2090),
+                        java.util.Map.entry("soybean",   4600),
+                        java.util.Map.entry("cotton",    7500),
+                        java.util.Map.entry("sugarcane",  340),
+                        java.util.Map.entry("onion",     1800),
+                        java.util.Map.entry("tomato",    1500),
+                        java.util.Map.entry("potato",    1200),
+                        java.util.Map.entry("groundnut", 6377),
+                        java.util.Map.entry("watermelon",1950),
+                        java.util.Map.entry("muskmelon", 1750),
+                        java.util.Map.entry("sunflower", 5800),
+                        java.util.Map.entry("mustard",   5650),
+                        java.util.Map.entry("chickpea",  5440),
+                        java.util.Map.entry("lentil",    6200)
+                )
+        );
+
+        /**
+         * Approx peak-demand month per crop (1 = Jan … 12 = Dec).
+         * Every entry can be overridden via {@code application.yml} or at
+         * runtime via {@code agriguardian.market.peak-months.wheat=4} etc.
+         */
+        private java.util.Map<String, Integer> peakMonths = new java.util.LinkedHashMap<>(
+                java.util.Map.ofEntries(
+                        java.util.Map.entry("wheat",      4),
+                        java.util.Map.entry("rice",      10),
+                        java.util.Map.entry("maize",     11),
+                        java.util.Map.entry("soybean",   10),
+                        java.util.Map.entry("cotton",    12),
+                        java.util.Map.entry("sugarcane",  2),
+                        java.util.Map.entry("onion",      6),
+                        java.util.Map.entry("tomato",     8),
+                        java.util.Map.entry("potato",     3),
+                        java.util.Map.entry("groundnut", 11),
+                        java.util.Map.entry("watermelon", 5),
+                        java.util.Map.entry("muskmelon",  5),
+                        java.util.Map.entry("sunflower",  4),
+                        java.util.Map.entry("mustard",    3),
+                        java.util.Map.entry("chickpea",   3),
+                        java.util.Map.entry("lentil",     4)
+                )
+        );
     }
 
     /**

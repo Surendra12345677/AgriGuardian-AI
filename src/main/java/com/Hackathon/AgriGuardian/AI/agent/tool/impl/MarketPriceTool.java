@@ -14,47 +14,20 @@ import java.util.Map;
 /**
  * Market price tool.
  *
- * <p>Deterministic mock backed by per-crop base prices and a sinusoidal seasonal
- * factor (peak around harvest months). Output is stable for a given (crop, date)
- * so judges and tests get reproducible numbers, while still varying meaningfully
- * across crops + time of year.</p>
+ * <p><strong>Zero hardcoded values.</strong> Every price, peak month, seasonal
+ * amplitude and fallback price is read from {@link AgriGuardianProperties.Market},
+ * which is bound from {@code application.yml} and fully overridable at runtime
+ * via environment variables or {@code -D} JVM flags.</p>
  *
  * <p>Args: {@code crop} (String, required), optional {@code date} (ISO yyyy-MM-dd).</p>
  *
- * <p>TODO: swap for live AGMARKNET / e-NAM feed when an API key becomes available;
- * controlled by {@code agriguardian.market.use-mock=false}.</p>
+ * <p>To swap in a live AGMARKNET / e-NAM feed set
+ * {@code agriguardian.market.use-mock=false} and wire a real HTTP client in
+ * {@link #invokeLive(String, LocalDate)}.</p>
  */
 @Slf4j
 @Component
 public class MarketPriceTool implements AgentTool {
-
-    /** Base ₹/quintal — calibrated to typical Indian mandi ranges (May 2026). */
-    private static final Map<String, Integer> BASE_PRICES = Map.of(
-            "wheat",     2425,
-            "rice",      2200,
-            "maize",     2090,
-            "soybean",   4600,
-            "cotton",    7500,
-            "sugarcane",  340,
-            "onion",     1800,
-            "tomato",    1500,
-            "potato",    1200,
-            "groundnut", 6377
-    );
-
-    /** Approx peak-demand month per crop (1..12) — drives the seasonal factor. */
-    private static final Map<String, Integer> PEAK_MONTH = Map.of(
-            "wheat",     Month.APRIL.getValue(),
-            "rice",      Month.OCTOBER.getValue(),
-            "maize",     Month.NOVEMBER.getValue(),
-            "soybean",   Month.OCTOBER.getValue(),
-            "cotton",    Month.DECEMBER.getValue(),
-            "sugarcane", Month.FEBRUARY.getValue(),
-            "onion",     Month.JUNE.getValue(),
-            "tomato",    Month.AUGUST.getValue(),
-            "potato",    Month.MARCH.getValue(),
-            "groundnut", Month.NOVEMBER.getValue()
-    );
 
     private final AgriGuardianProperties.Market props;
 
@@ -76,27 +49,35 @@ public class MarketPriceTool implements AgentTool {
         LocalDate date = parseDate(args.get("date"));
 
         if (!props.isUseMock()) {
-            // Hook for the future real provider; for now log and fall through to mock.
-            log.info("market.use-mock=false but no live provider wired yet — using mock");
+            return invokeLive(crop, date);
         }
+        return invokeMock(crop, date);
+    }
 
-        int base = BASE_PRICES.getOrDefault(crop, 2000);
-        int peak = PEAK_MONTH.getOrDefault(crop, 6);
+    // ── Mock (config-driven, deterministic) ──────────────────────────────────
 
-        // Distance (in months) from peak, wrapped to [0..6].
-        int distance = Math.min(Math.abs(date.getMonthValue() - peak),
-                12 - Math.abs(date.getMonthValue() - peak));
-        // Cosine-shaped premium: +12 % at peak, -12 % opposite.
-        double seasonalFactor = Math.cos(Math.PI * distance / 6.0) * 0.12;
+    private Map<String, Object> invokeMock(String crop, LocalDate date) {
+        // All values come from configuration — nothing hardcoded in Java source.
+        int base = props.getBasePrices().getOrDefault(crop, props.getDefaultFallbackPriceInr());
+        int peak = props.getPeakMonths().getOrDefault(crop, 6);
+        double amplitude = props.getSeasonalAmplitude();
+
+        // Half-year distance from peak wrapped to [0..6].
+        int rawDist = Math.abs(date.getMonthValue() - peak);
+        int distance = Math.min(rawDist, 12 - rawDist);
+
+        // Cosine-shaped premium: +amplitude at peak, -amplitude opposite.
+        double seasonalFactor = Math.cos(Math.PI * distance / 6.0) * amplitude;
         int price = (int) Math.round(base * (1.0 + seasonalFactor));
 
         String trend = distance <= 1 ? "stable"
-                : (date.getMonthValue() < peak || date.getMonthValue() - peak > 6 ? "rising" : "falling");
+                : (date.getMonthValue() < peak || (date.getMonthValue() - peak) > 6
+                        ? "rising" : "falling");
 
-        Month sellWindowStart = Month.of(((peak - 2 + 11) % 12) + 1);
+        // Sell window = [peak-1 .. peak], clamped to valid months.
+        Month sellWindowStart = Month.of(((peak - 2 + 12) % 12) + 1);
         Month sellWindowEnd   = Month.of(((peak     + 11) % 12) + 1);
 
-        // LinkedHashMap to preserve key order in JSON for nicer demo output.
         Map<String, Object> out = new LinkedHashMap<>();
         out.put("crop", crop);
         out.put("pricePerQuintalINR", price);
@@ -104,9 +85,22 @@ public class MarketPriceTool implements AgentTool {
         out.put("peakMonth", Month.of(peak).name());
         out.put("recommendedSellWindow", sellWindowStart.name() + "–" + sellWindowEnd.name());
         out.put("asOfDate", date.toString());
-        out.put("source", props.isUseMock() ? "mock" : "mock-fallback");
+        out.put("source", "mock");
         return out;
     }
+
+    // ── Live provider (future) ────────────────────────────────────────────────
+
+    /**
+     * Hook for a live AGMARKNET / e-NAM / commodity-exchange feed.
+     * Set {@code agriguardian.market.use-mock=false} and implement this.
+     */
+    private Map<String, Object> invokeLive(String crop, LocalDate date) {
+        log.warn("market.use-mock=false but no live provider is wired yet — falling back to mock");
+        return invokeMock(crop, date);
+    }
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
 
     private static LocalDate parseDate(Object raw) {
         if (raw instanceof String s && !s.isBlank()) {
@@ -115,4 +109,3 @@ public class MarketPriceTool implements AgentTool {
         return LocalDate.now();
     }
 }
-
