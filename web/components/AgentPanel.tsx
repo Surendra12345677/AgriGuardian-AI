@@ -12,8 +12,9 @@ type Parsed = {
   confidence?: number;
   impact?: Impact;
   risks?: string[];
-  _source?: string;     // "offline-fallback" when Gemini quota was saved
+  _source?: string;     // "offline-fallback" when Gemini unavailable
   _reason?: string;
+  _modelServed?: string; // actual model that answered (injected by backend)
   _basis?: {
     season?: string;
     month?: number;
@@ -229,7 +230,7 @@ export default function AgentPanel({
               <>
                 <div className="mt-3 grid grid-cols-3 gap-2 text-center">
                   <Metric k="Latency" v={latencyMs ? `${latencyMs}ms` : "—"} />
-                  <Metric k="Model"   v={view._source === "offline-fallback" ? "offline" : "gemini-3-pro-preview"} />
+                  <Metric k="Model"   v={view._source === "offline-fallback" ? "offline" : (view._modelServed ?? "gemini-3-pro-preview")} />
                   <Metric k="Tools"   v="5" />
                 </div>
                 {view.impact && <div className="mt-4"><ImpactDashboard impact={view.impact} /></div>}

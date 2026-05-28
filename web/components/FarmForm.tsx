@@ -9,6 +9,19 @@ import Select from "./Select";
 const WATER = ["LOW", "MEDIUM", "HIGH"] as const;
 const SOIL  = ["LOAM", "CLAY", "SANDY", "BLACK", "RED"] as const;
 
+const WATER_LABELS: Record<typeof WATER[number], string> = {
+  LOW: "Low",
+  MEDIUM: "Medium",
+  HIGH: "High",
+};
+const SOIL_LABELS: Record<typeof SOIL[number], string> = {
+  LOAM:  "Loam",
+  CLAY:  "Clay",
+  SANDY: "Sandy",
+  BLACK: "Black Cotton",
+  RED:   "Red Laterite",
+};
+
 export default function FarmForm({
   onCreated,
   selected,
@@ -120,11 +133,13 @@ export default function FarmForm({
           <Field label="Water availability">
             <Select value={form.waterAvailability as (typeof WATER)[number]}
                     options={WATER}
+                    displayMap={WATER_LABELS}
                     onChange={v => set("waterAvailability", v)} />
           </Field>
           <Field label="Soil type">
             <Select value={form.soilType as (typeof SOIL)[number]}
                     options={SOIL}
+                    displayMap={SOIL_LABELS}
                     onChange={v => set("soilType", v)} />
           </Field>
         </div>

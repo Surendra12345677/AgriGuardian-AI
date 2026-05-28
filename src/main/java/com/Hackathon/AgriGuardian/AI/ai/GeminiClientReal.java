@@ -38,8 +38,8 @@ public class GeminiClientReal implements GeminiClient {
 
     private static final Logger log = LoggerFactory.getLogger(GeminiClientReal.class);
 
-    private static final int MAX_ATTEMPTS = 3;
-    private static final long INITIAL_BACKOFF_MS = 800L;
+    private static final int MAX_ATTEMPTS = 2;
+    private static final long INITIAL_BACKOFF_MS = 250L;
 
     private final RestClient restClient;
     private final AgriGuardianProperties.Gemini cfg;
@@ -48,7 +48,20 @@ public class GeminiClientReal implements GeminiClient {
     public GeminiClientReal(AgriGuardianProperties.Gemini cfg, Tracer tracer) {
         this.cfg = cfg;
         this.tracer = tracer;
-        this.restClient = RestClient.builder().baseUrl(cfg.getBaseUrl()).build();
+        // Wire a real read+connect timeout so a hung Gemini connection doesn't
+        // block the request thread for minutes. Without this, a single stalled
+        // TCP connection holds up all retries and the whole agent loop, which
+        // is why the demo was showing 40+ second latency before timing out to
+        // the offline plan.
+        int timeoutSec = Math.max(5, cfg.getTimeoutSeconds());
+        org.springframework.http.client.SimpleClientHttpRequestFactory rf =
+                new org.springframework.http.client.SimpleClientHttpRequestFactory();
+        rf.setConnectTimeout(java.time.Duration.ofSeconds(10));
+        rf.setReadTimeout(java.time.Duration.ofSeconds(timeoutSec));
+        this.restClient = RestClient.builder()
+                .baseUrl(cfg.getBaseUrl())
+                .requestFactory(rf)
+                .build();
     }
 
     @Override
@@ -78,6 +91,10 @@ public class GeminiClientReal implements GeminiClient {
             for (String model : chain) {
                 try {
                     String out = doGenerate(systemPrompt, userPrompt, context, span, model);
+                    // Stamp which model actually answered so the UI can display it
+                    // accurately (instead of always saying "gemini-3-pro-preview"
+                    // even when a fallback served the request).
+                    out = stampModelServed(out, model);
                     if (!model.equals(cfg.getModel())) {
                         log.info("Gemini served by fallback model='{}' (primary='{}' was unavailable)",
                                 model, cfg.getModel());
@@ -106,22 +123,38 @@ public class GeminiClientReal implements GeminiClient {
         return s.length() <= max ? s : s.substring(0, max) + "...";
     }
 
+    /**
+     * Inject {@code "_modelServed"} into the JSON payload so the UI can
+     * show the model that actually answered without hard-coding any name.
+     * No-ops gracefully on unparseable payloads.
+     */
+    private static String stampModelServed(String json, String model) {
+        if (json == null || model == null || !json.trim().startsWith("{")) return json;
+        try {
+            // Simple injection: find the last } and insert before it.
+            int last = json.lastIndexOf('}');
+            if (last < 0) return json;
+            String modelJson = ",\"_modelServed\":\"" + model.replace("\"", "") + "\"";
+            return json.substring(0, last) + modelJson + "}";
+        } catch (Exception ignored) {
+            return json;
+        }
+    }
+
     private String doGenerate(String systemPrompt, String userPrompt, Map<String, Object> context,
                               Span span, String activeModel) {
             String prompt = systemPrompt + "\n\nContext:" + context + "\n\nUser:" + userPrompt;
 
-            String model = activeModel == null ? "" : activeModel.toLowerCase();
-            boolean isFlash = model.contains("flash");
-            Map<String, Object> thinkingConfig = isFlash
-                    ? Map.of("thinkingBudget", 0)        // flash: thinking off
-                    : Map.of("thinkingBudget", 512);     // pro: tight cap
-            Map<String, Object> generationConfig = Map.of(
-                    "temperature",       0.4,
-                    "topP",              0.9,
-                    "maxOutputTokens",   4096,
-                    "responseMimeType",  "application/json",
-                    "thinkingConfig",    thinkingConfig
-            );
+            // Keep generationConfig minimal and universal — no thinkingConfig.
+            // The thinkingConfig field (thinkingBudget) is only supported by
+            // gemini-2.5+ and causes HTTP 400 on gemini-3-pro-preview and
+            // on older models that don't advertise thinking support.
+            // That 400 was non-retriable and was the sole reason every request
+            // fell through to the offline deterministic plan.
+            java.util.LinkedHashMap<String, Object> generationConfig = new java.util.LinkedHashMap<>();
+            generationConfig.put("temperature",      0.35);
+            generationConfig.put("maxOutputTokens",  4096);
+            generationConfig.put("responseMimeType", "application/json");
             Map<String, Object> body = Map.of(
                     "contents", List.of(Map.of(
                             "role", "user",
