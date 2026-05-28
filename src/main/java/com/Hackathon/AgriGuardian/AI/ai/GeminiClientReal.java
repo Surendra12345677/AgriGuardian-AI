@@ -38,8 +38,12 @@ public class GeminiClientReal implements GeminiClient {
 
     private static final Logger log = LoggerFactory.getLogger(GeminiClientReal.class);
 
-    private static final int MAX_ATTEMPTS = 2;
-    private static final long INITIAL_BACKOFF_MS = 250L;
+    // Only retry once on transient errors (5xx / per-minute 429).
+    // Daily quota exhaustion fast-fails immediately — no point retrying.
+    private static final int  MAX_ATTEMPTS      = 2;
+    private static final long INITIAL_BACKOFF_MS = 500L;
+    // Cap per-minute back-off so we don't block the request thread for too long.
+    private static final long MAX_BACKOFF_MS     = 6_000L;
 
     private final RestClient restClient;
     private final AgriGuardianProperties.Gemini cfg;
@@ -48,11 +52,6 @@ public class GeminiClientReal implements GeminiClient {
     public GeminiClientReal(AgriGuardianProperties.Gemini cfg, Tracer tracer) {
         this.cfg = cfg;
         this.tracer = tracer;
-        // Wire a real read+connect timeout so a hung Gemini connection doesn't
-        // block the request thread for minutes. Without this, a single stalled
-        // TCP connection holds up all retries and the whole agent loop, which
-        // is why the demo was showing 40+ second latency before timing out to
-        // the offline plan.
         int timeoutSec = Math.max(5, cfg.getTimeoutSeconds());
         org.springframework.http.client.SimpleClientHttpRequestFactory rf =
                 new org.springframework.http.client.SimpleClientHttpRequestFactory();
@@ -66,53 +65,30 @@ public class GeminiClientReal implements GeminiClient {
 
     @Override
     public String generate(String systemPrompt, String userPrompt, Map<String, Object> context) {
+        // We always use the configured primary model — gemini-3-pro-preview.
+        // No fallback to other model families: when billing is added the
+        // primary will serve every request without any code change needed.
+        String model = (cfg.getModel() != null && !cfg.getModel().isBlank())
+                ? cfg.getModel().trim() : "gemini-3-pro-preview";
+
         Span span = tracer.spanBuilder("gemini.generate")
-                .setAttribute(AttributeKey.stringKey("model"), cfg.getModel())
+                .setAttribute(AttributeKey.stringKey("model"), model)
                 .setAttribute(AttributeKey.longKey("prompt.tokens.estimate"),
                         (long) ((systemPrompt.length() + userPrompt.length()) / 4))
                 .startSpan();
         try (var scope = span.makeCurrent()) {
-            // Build the ordered model chain: primary model first, then any
-            // configured fallbacks (de-duplicated, blanks removed). On Cloud
-            // Run this guarantees that if the hackathon preview model
-            // (e.g. gemini-3-pro-preview) is 404/429 on the key's project,
-            // we transparently fall over to a generally-available model
-            // (gemini-2.5-pro → 2.5-flash → 2.0-flash) BEFORE ever showing
-            // the deterministic offline plan to a judge.
-            java.util.LinkedHashSet<String> chain = new java.util.LinkedHashSet<>();
-            if (cfg.getModel() != null && !cfg.getModel().isBlank()) chain.add(cfg.getModel().trim());
-            if (cfg.getFallbackModels() != null) {
-                for (String m : cfg.getFallbackModels()) {
-                    if (m != null && !m.isBlank()) chain.add(m.trim());
-                }
+            try {
+                String out = doGenerate(systemPrompt, userPrompt, context, span, model);
+                out = stampModelServed(out, model);
+                span.setAttribute(AttributeKey.stringKey("gemini.model.served"), model);
+                return out;
+            } catch (GeminiOfflineSignal sig) {
+                log.error("gemini-3-pro-preview unavailable — serving offline plan. Reason: {}",
+                        sig.getMessage());
+                span.setAttribute(AttributeKey.stringKey("gemini.fallback"), "offline-plan");
+                span.setAttribute(AttributeKey.stringKey("gemini.offline.reason"), sig.getMessage());
+                return offlineDemoPlan(context, sig.getMessage());
             }
-
-            String lastReason = "Gemini chain empty";
-            for (String model : chain) {
-                try {
-                    String out = doGenerate(systemPrompt, userPrompt, context, span, model);
-                    // Stamp which model actually answered so the UI can display it
-                    // accurately (instead of always saying "gemini-3-pro-preview"
-                    // even when a fallback served the request).
-                    out = stampModelServed(out, model);
-                    if (!model.equals(cfg.getModel())) {
-                        log.info("Gemini served by fallback model='{}' (primary='{}' was unavailable)",
-                                model, cfg.getModel());
-                        span.setAttribute(AttributeKey.stringKey("gemini.model.served"), model);
-                        span.setAttribute(AttributeKey.stringKey("gemini.model.fallback"), "true");
-                    }
-                    return out;
-                } catch (GeminiOfflineSignal sig) {
-                    lastReason = sig.getMessage();
-                    log.warn("Gemini model='{}' unavailable — trying next fallback. Reason: {}",
-                            model, lastReason);
-                    span.setAttribute(AttributeKey.stringKey("gemini.model." + model + ".error"),
-                            truncate(lastReason, 180));
-                }
-            }
-            log.error("All Gemini models exhausted — serving offline demo plan. Last reason: {}", lastReason);
-            span.setAttribute(AttributeKey.stringKey("gemini.fallback"), "offline-plan");
-            return offlineDemoPlan(context, lastReason);
         } finally {
             span.end();
         }
@@ -124,70 +100,55 @@ public class GeminiClientReal implements GeminiClient {
     }
 
     /**
-     * Inject {@code "_modelServed"} into the JSON payload so the UI can
-     * show the model that actually answered without hard-coding any name.
-     * No-ops gracefully on unparseable payloads.
+     * Inject {@code "_modelServed"} into the JSON payload so the UI shows
+     * the real model name without hard-coding anything.
      */
     private static String stampModelServed(String json, String model) {
         if (json == null || model == null || !json.trim().startsWith("{")) return json;
         try {
-            // Simple injection: find the last } and insert before it.
             int last = json.lastIndexOf('}');
             if (last < 0) return json;
-            String modelJson = ",\"_modelServed\":\"" + model.replace("\"", "") + "\"";
-            return json.substring(0, last) + modelJson + "}";
-        } catch (Exception ignored) {
-            return json;
-        }
+            return json.substring(0, last)
+                    + ",\"_modelServed\":\"" + model.replace("\"", "") + "\"}";
+        } catch (Exception ignored) { return json; }
     }
 
     private String doGenerate(String systemPrompt, String userPrompt, Map<String, Object> context,
                               Span span, String activeModel) {
-            String prompt = systemPrompt + "\n\nContext:" + context + "\n\nUser:" + userPrompt;
+        String prompt = systemPrompt + "\n\nContext:" + context + "\n\nUser:" + userPrompt;
 
-            // Keep generationConfig minimal and universal — no thinkingConfig.
-            // The thinkingConfig field (thinkingBudget) is only supported by
-            // gemini-2.5+ and causes HTTP 400 on gemini-3-pro-preview and
-            // on older models that don't advertise thinking support.
-            // That 400 was non-retriable and was the sole reason every request
-            // fell through to the offline deterministic plan.
-            java.util.LinkedHashMap<String, Object> generationConfig = new java.util.LinkedHashMap<>();
-            generationConfig.put("temperature",      0.35);
-            generationConfig.put("maxOutputTokens",  4096);
-            generationConfig.put("responseMimeType", "application/json");
-            Map<String, Object> body = Map.of(
-                    "contents", List.of(Map.of(
-                            "role", "user",
-                            "parts", List.of(Map.of("text", prompt))
-                    )),
-                    "generationConfig", generationConfig
-            );
-            String path = "/models/" + activeModel + ":generateContent?key=" + cfg.getApiKey();
-            log.debug("Gemini request -> model={} baseUrl={} promptChars={}",
-                    activeModel, cfg.getBaseUrl(), prompt.length());
+        // No thinkingConfig — gemini-3-pro-preview returns HTTP 400 with it.
+        java.util.LinkedHashMap<String, Object> generationConfig = new java.util.LinkedHashMap<>();
+        generationConfig.put("temperature",      0.35);
+        generationConfig.put("maxOutputTokens",  4096);
+        generationConfig.put("responseMimeType", "application/json");
+        Map<String, Object> body = Map.of(
+                "contents", List.of(Map.of(
+                        "role",  "user",
+                        "parts", List.of(Map.of("text", prompt))
+                )),
+                "generationConfig", generationConfig
+        );
+        String path = "/models/" + activeModel + ":generateContent?key=" + cfg.getApiKey();
+        log.debug("Gemini request -> model={} promptChars={}", activeModel, prompt.length());
 
-            Map<String, Object> resp = callWithRetry(path, body, span, context, activeModel);
+        Map<String, Object> resp = callWithRetry(path, body, span, activeModel);
 
-            String text = extractText(resp);
-            if (text.isBlank()) {
-                String finishReason = extractFinishReason(resp);
-                Object usage = resp == null ? null : resp.get("usageMetadata");
-                log.warn("Gemini model={} returned empty text. finishReason={} usageMetadata={} keys={}",
-                        activeModel, finishReason, usage, resp == null ? "null" : resp.keySet());
-                // Signal upward so the outer chain can try the next fallback
-                // model instead of immediately serving the offline plan.
-                throw new GeminiOfflineSignal(
-                        "Gemini model " + activeModel + " returned no content (finishReason="
-                                + finishReason + ")");
-            }
-            log.debug("Gemini response chars={} model={}", text.length(), activeModel);
-            return text;
+        String text = extractText(resp);
+        if (text.isBlank()) {
+            String finishReason = extractFinishReason(resp);
+            log.warn("Gemini model={} returned empty text. finishReason={}", activeModel, finishReason);
+            throw new GeminiOfflineSignal(
+                    "gemini-3-pro-preview returned no content (finishReason=" + finishReason + ")");
+        }
+        log.debug("Gemini response chars={} model={}", text.length(), activeModel);
+        return text;
     }
 
-    /** POST with exponential-backoff retry on 429 + 5xx. Throws {@link GeminiOfflineSignal} on terminal failure. */
+    /** POST with retry. Detects daily-quota exhaustion and fast-fails instead of wasting retries. */
     @SuppressWarnings("unchecked")
-    private Map<String, Object> callWithRetry(String path, Map<String, Object> body, Span span,
-                                              Map<String, Object> context, String activeModel) {
+    private Map<String, Object> callWithRetry(String path, Map<String, Object> body,
+                                              Span span, String activeModel) {
         long backoffMs = INITIAL_BACKOFF_MS;
         for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
             try {
@@ -197,27 +158,49 @@ public class GeminiClientReal implements GeminiClient {
                         .retrieve()
                         .body(Map.class);
             } catch (RestClientResponseException http) {
-                int status = http.getStatusCode().value();
-                boolean retriable = status == 429 || (status >= 500 && status <= 599);
+                int    status       = http.getStatusCode().value();
                 String responseBody = http.getResponseBodyAsString();
-                String trimmed = responseBody.length() > 800
-                        ? responseBody.substring(0, 800) + "...[truncated]" : responseBody;
-                log.warn("Gemini HTTP {} (attempt {}/{}) for model={} : {}",
-                        status, attempt, MAX_ATTEMPTS, activeModel, trimmed);
                 span.setAttribute(AttributeKey.longKey("gemini.http.status"), status);
+
+                log.warn("Gemini HTTP {} (attempt {}/{}) model={}", status, attempt, MAX_ATTEMPTS, activeModel);
+
+                if (status == 429) {
+                    boolean dailyExhausted = isDailyQuotaExhausted(responseBody);
+                    if (dailyExhausted) {
+                        // Daily free-tier quota is fully used. Retrying will keep failing
+                        // until midnight Pacific OR billing is enabled. Fast-fail with a
+                        // clear operator message so the UI shows the billing fix link.
+                        String msg = "gemini-3-pro-preview free-tier DAILY quota exhausted. "
+                                + "Fix → go to https://aistudio.google.com/apikey, find your key, "
+                                + "click 'Set up billing' / 'Enable Pay-as-you-go' and link your "
+                                + "GCP billing account. The app will work immediately after that with "
+                                + "no code changes needed.";
+                        log.error("[ACTION REQUIRED] {}. Raw error: {}", msg, truncate(responseBody, 400));
+                        span.recordException(http);
+                        span.setAttribute(AttributeKey.stringKey("gemini.quota.fix"),
+                                "https://aistudio.google.com/apikey → Enable Pay-as-you-go");
+                        throw new GeminiOfflineSignal(msg);
+                    }
+                    // Per-minute rate limit — wait and retry.
+                    long waitMs = Math.min(parseRetryAfterSec(responseBody) * 1000L, MAX_BACKOFF_MS);
+                    if (waitMs < INITIAL_BACKOFF_MS) waitMs = backoffMs;
+                    log.warn("Gemini 429 rate-limit, retrying in {}ms", waitMs);
+                    if (attempt == MAX_ATTEMPTS) {
+                        span.recordException(http);
+                        throw new GeminiOfflineSignal(diagnose(status, responseBody, activeModel));
+                    }
+                    sleep(waitMs);
+                    backoffMs = Math.min(waitMs * 2, MAX_BACKOFF_MS);
+                    continue;
+                }
+
+                boolean retriable = status >= 500 && status <= 599;
                 if (!retriable || attempt == MAX_ATTEMPTS) {
                     span.recordException(http);
-                    // Do NOT throw a hard exception — bubble up an offline
-                    // signal so the outer model-fallback chain can try the
-                    // next configured model before resorting to the offline
-                    // deterministic plan.
                     throw new GeminiOfflineSignal(diagnose(status, responseBody, activeModel));
                 }
-                try { Thread.sleep(backoffMs); } catch (InterruptedException ie) {
-                    Thread.currentThread().interrupt();
-                    throw new GeminiOfflineSignal("Interrupted while backing off Gemini retry");
-                }
-                backoffMs *= 2;
+                sleep(backoffMs);
+                backoffMs = Math.min(backoffMs * 2, MAX_BACKOFF_MS);
             } catch (GeminiOfflineSignal sig) {
                 throw sig;
             } catch (Exception ex) {
@@ -229,30 +212,51 @@ public class GeminiClientReal implements GeminiClient {
         throw new GeminiOfflineSignal("Gemini retries exhausted");
     }
 
-    /** Internal control-flow signal used to bubble up to the offline-plan path. */
+    private static void sleep(long ms) {
+        try { Thread.sleep(ms); } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
+            throw new GeminiOfflineSignal("Interrupted during Gemini back-off");
+        }
+    }
+
+    /** Returns true when the 429 body indicates the DAILY free-tier quota is exhausted. */
+    private static boolean isDailyQuotaExhausted(String body) {
+        if (body == null) return false;
+        return body.contains("PerDay") || body.contains("PerModelPerDay")
+                || body.contains("free_tier_input_token_count")
+                || body.contains("free_tier_requests");
+    }
+
+    /** Parse retryDelay from Google's 429 JSON body, e.g. "retryDelay": "37s". Returns 0 if absent. */
+    private static long parseRetryAfterSec(String body) {
+        if (body == null) return 0;
+        java.util.regex.Matcher m =
+                java.util.regex.Pattern.compile("\"retryDelay\"\\s*:\\s*\"(\\d+)s\"").matcher(body);
+        if (m.find()) { try { return Long.parseLong(m.group(1)); } catch (NumberFormatException ignored) {} }
+        return 0;
+    }
+
+    /** Internal control-flow signal — never escapes GeminiClientReal. */
     private static final class GeminiOfflineSignal extends RuntimeException {
         GeminiOfflineSignal(String reason) { super(reason); }
     }
 
-    /** Map an HTTP status to an actionable, deploy-ready operator message. */
+    /** Map HTTP status → actionable operator message. */
     private String diagnose(int status, String body, String activeModel) {
         return switch (status) {
-            case 400 -> "Gemini rejected the request (HTTP 400). The model name '"
-                    + activeModel + "' may be wrong or the prompt is malformed. "
-                    + "Server response: " + body;
-            case 401, 403 -> "Gemini authentication failed (HTTP " + status + "). "
-                    + "Check that GEMINI_API_KEY is correct AND that the project that owns the key "
-                    + "(a) has billing enabled in GCP, (b) has the 'Generative Language API' enabled, "
-                    + "and (c) the key isn't restricted to other APIs. "
-                    + "Verify at https://console.cloud.google.com/apis/credentials and "
-                    + "https://console.cloud.google.com/billing. Server response: " + body;
-            case 404 -> "Gemini model '" + activeModel + "' not found (HTTP 404). "
-                    + "The API key's project may not have access to this preview model. "
-                    + "Server response: " + body;
-            case 429 -> "Gemini quota exceeded (HTTP 429) on model '" + activeModel + "' after "
-                    + MAX_ATTEMPTS + " retries. Server response: " + body;
-            default -> "Gemini HTTP " + status + " on model '" + activeModel + "' after "
-                    + MAX_ATTEMPTS + " retries. Server response: " + body;
+            case 400 -> "HTTP 400: gemini-3-pro-preview rejected the request — prompt may be malformed. "
+                    + "Response: " + truncate(body, 300);
+            case 401, 403 -> "HTTP " + status + ": Gemini authentication failed. "
+                    + "Check GEMINI_API_KEY is valid AND the GCP project has the 'Generative Language API' enabled. "
+                    + "See: https://console.cloud.google.com/apis/credentials";
+            case 404 -> "HTTP 404: gemini-3-pro-preview not found on this API key. "
+                    + "Your project may not have preview-model access yet. "
+                    + "Response: " + truncate(body, 200);
+            case 429 -> "HTTP 429: gemini-3-pro-preview quota exceeded. "
+                    + "Enable Pay-as-you-go at https://aistudio.google.com/apikey. "
+                    + "Response: " + truncate(body, 200);
+            default -> "HTTP " + status + " from gemini-3-pro-preview after " + MAX_ATTEMPTS
+                    + " attempts. Response: " + truncate(body, 200);
         };
     }
 
@@ -507,4 +511,3 @@ public class GeminiClientReal implements GeminiClient {
         return s.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", " ");
     }
 }
-

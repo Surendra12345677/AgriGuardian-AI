@@ -25,17 +25,12 @@ public class AgriGuardianProperties {
         @NotBlank
         private String model = "gemini-3-pro-preview";
         /**
-         * Ordered list of models to try when the primary {@link #model} fails
-         * (HTTP 404 unknown-model, 429 quota, 5xx). Prevents the demo from
-         * ever falling into the deterministic offline plan when at least one
-         * generally-available Gemini model can still serve the request.
+         * Fallback models — intentionally empty.
+         * We exclusively use gemini-3-pro-preview. Once Pay-as-you-go billing
+         * is enabled at https://aistudio.google.com/apikey the primary model
+         * will always serve without needing any fallback.
          */
-        private java.util.List<String> fallbackModels = new java.util.ArrayList<>(java.util.List.of(
-                "gemini-3-flash-preview",   // stay inside the Gemini 3 family first
-                "gemini-2.5-pro",
-                "gemini-2.5-flash",
-                "gemini-2.0-flash"
-        ));
+        private java.util.List<String> fallbackModels = new java.util.ArrayList<>();
         private String baseUrl = "https://generativelanguage.googleapis.com/v1beta";
         /** auto | always | never. */
         private String stubMode = "auto";

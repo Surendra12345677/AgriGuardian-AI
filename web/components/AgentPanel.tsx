@@ -192,21 +192,35 @@ export default function AgentPanel({
                 )}
                 {rec && (
                   view._source === "offline-fallback" ? (
-                    <div className="mt-1 flex items-center gap-2 flex-wrap">
-                      <div className="inline-flex items-center gap-1 text-[10px]
-                                      uppercase tracking-wider text-amber-300/90 font-semibold"
-                           title={view._reason || ""}>
-                        <span className="h-1.5 w-1.5 rounded-full bg-amber-300" />
-                        Offline plan · Gemini quota saved
+                    <div className="mt-1 space-y-1.5">
+                      <div className="inline-flex items-center gap-1.5 text-[10px]
+                                      uppercase tracking-wider text-amber-300/90 font-semibold">
+                        <span className="h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse" />
+                        Gemini 3 quota limit reached · billing fix needed
                       </div>
-                      <button
-                        onClick={() => ask({ forceLive: true })}
-                        disabled={busy}
-                        className="text-[10px] px-2 py-0.5 rounded border border-amber-300/40 text-amber-200 hover:bg-amber-300/10 disabled:opacity-50"
-                        title={view._reason ? `Why offline: ${view._reason}` : "Retry with a fresh Gemini call"}
-                      >
-                        ⟳ Retry live
-                      </button>
+                      {/* Show billing fix banner when it's a quota issue */}
+                      {view._reason && view._reason.includes("quota") && (
+                        <div className="rounded-lg border border-amber-400/30 bg-amber-400/[0.06] px-3 py-2 text-[11px] text-amber-200 leading-relaxed">
+                          <span className="font-semibold text-amber-300">To restore live Gemini 3: </span>
+                          Go to{" "}
+                          <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer"
+                             className="underline text-amber-100 hover:text-white">
+                            aistudio.google.com/apikey
+                          </a>
+                          {" "}→ find your key → click <strong>Set up billing / Enable Pay-as-you-go</strong> → link your GCP billing account.
+                          No code changes needed — it works immediately.
+                        </div>
+                      )}
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => ask({ forceLive: true })}
+                          disabled={busy}
+                          className="text-[10px] px-2 py-0.5 rounded border border-amber-300/40 text-amber-200 hover:bg-amber-300/10 disabled:opacity-50"
+                          title={view._reason ? `Why offline: ${view._reason}` : "Retry with a fresh Gemini call"}
+                        >
+                          ⟳ Retry live
+                        </button>
+                      </div>
                     </div>
                   ) : (
                     <div className="mt-1 inline-flex items-center gap-1 text-[10px]
