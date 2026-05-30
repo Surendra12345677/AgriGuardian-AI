@@ -30,13 +30,16 @@ const SOIL_LABELS: Record<typeof SOIL[number], string> = {
 export default function EditFarmCard({
   farm,
   onUpdated,
+  onDeleted,
   onSwitchToNew,
 }: {
   farm: Farm;
   onUpdated: (f: Farm) => void;
+  onDeleted?: (f: Farm) => void;
   onSwitchToNew?: () => void;
 }) {
   const [busy, setBusy] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [okMsg, setOk] = useState<string | null>(null);
 
@@ -198,6 +201,26 @@ export default function EditFarmCard({
         <div className="ml-auto flex items-center gap-3">
           {error && <p className="text-sm text-red-300">{error}</p>}
           {okMsg && <p className="text-sm text-emerald-300">{okMsg}</p>}
+          {onDeleted && (
+            <button
+              type="button"
+              disabled={deleting || busy}
+              onClick={async () => {
+                if (!window.confirm(`Delete "${farm.farmerName}"? This cannot be undone.`)) return;
+                setDeleting(true);
+                try {
+                  await api.deleteFarm(farm.id);
+                  onDeleted(farm);
+                } catch (err: any) {
+                  setError(err.message);
+                } finally { setDeleting(false); }
+              }}
+              className="text-sm px-3 py-2 rounded-lg border border-red-400/30 text-red-300
+                         hover:bg-red-400/10 disabled:opacity-50 transition"
+            >
+              {deleting ? "Deleting…" : "🗑 Delete farm"}
+            </button>
+          )}
           <button disabled={busy} className="btn-primary">
             {busy ? "Saving…" : "Save changes"}
           </button>

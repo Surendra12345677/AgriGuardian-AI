@@ -49,6 +49,21 @@ export default function HomePage() {
     }
   }
 
+  async function deleteFarm(farm: Farm) {
+    if (!window.confirm(`Delete "${farm.farmerName}"? This cannot be undone.`)) return;
+    try {
+      await api.deleteFarm(farm.id);
+      setFarms(prev => prev.filter(f => f.id !== farm.id));
+      if (selected?.id === farm.id) {
+        const remaining = farms.filter(f => f.id !== farm.id);
+        setSelect(remaining[0]);
+        setMode(remaining.length ? "edit" : "new");
+      }
+    } catch (err: any) {
+      alert("Delete failed: " + err.message);
+    }
+  }
+
   useEffect(() => { refresh(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* Sections that need an active farm — used to show a friendly "go onboard" card. */
@@ -139,6 +154,12 @@ export default function HomePage() {
                     setFarms(prev => prev.map(x => x.id === f.id ? f : x));
                     setSelect(f);
                   }}
+                  onDeleted={f => {
+                    const remaining = farms.filter(x => x.id !== f.id);
+                    setFarms(remaining);
+                    setSelect(remaining[0]);
+                    setMode(remaining.length ? "edit" : "new");
+                  }}
                   onSwitchToNew={() => setMode("new")}
                 />
               ) : (
@@ -169,6 +190,7 @@ export default function HomePage() {
                 </div>
                 <FarmList farms={farms} selectedId={selected?.id}
                           onSelect={f => { setSelect(f); setMode("edit"); }}
+                          onDelete={deleteFarm}
                           loading={loading} />
               </div>
             </aside>
@@ -180,20 +202,23 @@ export default function HomePage() {
         <ViewShell
           eyebrow="Step 2 · Plan"
           title="Plan the most profitable season."
-          sub="Gemini calls weather, soil and market tools, then emits a JSON plan with a day-by-day task list and projected income."
+          sub="Gemini 3 calls weather, soil and market tools, then emits a JSON plan with a day-by-day task list and projected income. Every span streams to Arize AX in real time."
           action={<LanguagePill lang={lang} onChange={setLang} />}
         >
           {selected ? (
-            <div className="grid lg:grid-cols-3 gap-4">
-              <div className="lg:col-span-2">
-                <AgentPanel farm={selected} language={lang} onLanguageChange={setLang} />
+            <div className="space-y-4">
+              {/* Main two-column layout: agent on left, Arize live on right */}
+              <div className="grid lg:grid-cols-5 gap-4 items-start">
+                <div className="lg:col-span-3">
+                  <AgentPanel farm={selected} language={lang} onLanguageChange={setLang} />
+                </div>
+                <div className="lg:col-span-2 space-y-4">
+                  {/* Arize live quality — always visible, not buried in result */}
+                  <EvalQualityCard />
+                </div>
               </div>
-              <div className="lg:col-span-1">
-                <EvalQualityCard />
-              </div>
-              <div className="lg:col-span-3">
-                <FeedbackLoop />
-              </div>
+              {/* Feedback loop — collapsed by default, expandable */}
+              <CollapsibleFeedback />
             </div>
           ) : (
             <NeedFarmCard onGo={() => navigate("onboard")} label="Save a farm first to enable the planner." />
@@ -450,6 +475,35 @@ function NeedFarmCard({ label, onGo }: { label: string; onGo: () => void }) {
       <button onClick={onGo} className="btn-primary text-sm mt-4 inline-flex">
         ↑ Go to onboarding
       </button>
+    </div>
+  );
+}
+
+/** Regression-test panel — hidden by default so it doesn't clutter the page.
+ *  Judges can expand it to demo the full Arize-style feedback loop. */
+function CollapsibleFeedback() {
+  const [open, setOpen] = useState(false);
+  return (
+    <div>
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center justify-between gap-2 card px-4 py-3 text-sm
+                   text-slate-300 hover:text-slate-100 hover:border-emerald-400/30 transition"
+      >
+        <div className="flex items-center gap-2">
+          <span className="text-base">🔁</span>
+          <span className="font-medium">Arize feedback loop — failed traces → regression tests</span>
+          <span className="text-[10px] px-1.5 py-0.5 rounded bg-violet-400/15 text-violet-300 font-semibold uppercase tracking-wider">
+            Arize-style
+          </span>
+        </div>
+        <span className="text-slate-500 text-xs">{open ? "▲ hide" : "▼ show"}</span>
+      </button>
+      {open && (
+        <div className="mt-2">
+          <FeedbackLoop />
+        </div>
+      )}
     </div>
   );
 }

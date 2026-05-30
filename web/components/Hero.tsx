@@ -16,7 +16,7 @@ export default function Hero() {
                           bg-emerald-400/10 px-3 py-1 text-[11px] uppercase tracking-wider
                           text-emerald-300 font-semibold">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            Live · Gemini 2.5 · Arize MCP · MongoDB
+            Live · Gemini 3 Pro · Arize MCP · MongoDB
           </div>
 
           <h1 className="mt-5 text-4xl md:text-6xl font-extrabold tracking-tight
@@ -76,7 +76,7 @@ export default function Hero() {
               <Trace label="reflector.reflect"   ms="22" />
               <Trace label="mongo.save"          ms="38" />
               <div className="pt-2 mt-2 border-t border-white/5 flex items-center justify-between text-[11px]">
-                <span className="text-slate-500">9 spans · gemini-3-pro-preview</span>
+                <span className="text-slate-500">9 spans · gemini-3.1-pro-preview</span>
                 <span className="text-emerald-300 font-semibold">+₹38,400 projected</span>
               </div>
             </div>

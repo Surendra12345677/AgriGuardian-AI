@@ -109,6 +109,9 @@ export const api = {
   /** PUT — used by the "Edit selected farm" card to relocate the pin. */
   updateFarm: (id: string, f: Omit<Farm, "id" | "createdAt" | "chosenCrop">) =>
     http<Farm>(`/api/v1/farms/${id}`, { method: "PUT", body: JSON.stringify(f) }),
+  /** DELETE — remove a farm and all its cached recommendations. */
+  deleteFarm: (id: string) =>
+    http<void>(`/api/v1/farms/${id}`, { method: "DELETE" }),
   recommend:  (req: {
     farmId: string;
     latitude: number;
