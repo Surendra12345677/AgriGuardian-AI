@@ -48,6 +48,8 @@ export default function AgentPanel({
   const [rec,  setRec]    = useState<Recommendation | null>(null);
   const [tStart, setTStart] = useState<number | null>(null);
   const [tEnd,   setTEnd]   = useState<number | null>(null);
+  const [liveElapsed, setLiveElapsed] = useState(0);
+  const elapsedRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Track which farm the currently-displayed result belongs to. When the
   // user switches the active farm in the FarmContextBar above (same
@@ -73,7 +75,11 @@ export default function AgentPanel({
   async function ask(opts?: { forceLive?: boolean; cropOverride?: string }) {
     if (!farm) return;
     setBusy(true); setError(null); setRec(null); setTEnd(null);
-    setTStart(performance.now());
+    setLiveElapsed(0);
+    const t0 = performance.now();
+    setTStart(t0);
+    if (elapsedRef.current) clearInterval(elapsedRef.current);
+    elapsedRef.current = setInterval(() => setLiveElapsed(Math.floor((performance.now() - t0) / 1000)), 500);
     // First call after switching farms always bypasses the cache.
     const forceLive = !!opts?.forceLive || farmChanged;
     try {
@@ -101,6 +107,7 @@ export default function AgentPanel({
     } catch (err: any) {
       setError(err.message);
     } finally {
+      if (elapsedRef.current) clearInterval(elapsedRef.current);
       setTEnd(performance.now());
       setBusy(false);
     }
@@ -155,8 +162,9 @@ export default function AgentPanel({
                      onChange={e => setCrop(e.target.value)} />
             </label>
             <button onClick={() => ask()} disabled={busy} className="btn-primary text-base !py-2.5 !px-5">
-              {busy ? <span className="flex items-center gap-2"><Spinner /> Planning…</span>
-                    : <>▶ Plan my season</>}
+              {busy
+                ? <span className="flex items-center gap-2"><Spinner /> Planning… <span className="tabular-nums text-emerald-200/70">{liveElapsed}s</span></span>
+                : <>▶ Plan my season</>}
             </button>
             <button
               onClick={() => ask({ forceLive: true })}
@@ -377,60 +385,7 @@ export default function AgentPanel({
                     </ul>
                   </div>
                 )}
-                {view.arize || rec.traceId ? (
-                  <div className="mt-5">
-                    <div className="label mb-2 flex items-center gap-2">
-                      <span className="text-[12px]">Arize AX · partner observability</span>
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-400/15 text-emerald-300 font-semibold uppercase tracking-wider animate-pulse">
-                        live
-                      </span>
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-violet-400/15 text-violet-300 font-semibold uppercase tracking-wider">
-                        MCP + OTLP
-                      </span>
-                    </div>
-                    <div className="rounded-xl border border-emerald-400/25 bg-gradient-to-br from-emerald-400/[0.06] to-violet-400/[0.04] p-4 space-y-2 text-[13px]">
-                      <div className="grid sm:grid-cols-2 gap-x-4 gap-y-2">
-                        <div className="flex justify-between gap-2">
-                          <span className="text-slate-400">MCP operation</span>
-                          <code className="text-emerald-200 font-semibold">{view.arize?.operation || "search_traces"}</code>
-                        </div>
-                        <div className="flex justify-between gap-2">
-                          <span className="text-slate-400">Source</span>
-                          <code className="text-slate-100">{view.arize?.source || "arize-mcp"}</code>
-                        </div>
-                        <div className="flex justify-between gap-2">
-                          <span className="text-slate-400">Spans exported</span>
-                          <code className="text-slate-100">
-                            {view.arize?.spansExported ?? 9} via {view.arize?.exporter || "OTLP → Arize AX"}
-                          </code>
-                        </div>
-                        <div className="flex justify-between gap-2">
-                          <span className="text-slate-400">Reasoning model</span>
-                          <code className="text-violet-200 font-semibold">gemini-3-pro-preview</code>
-                        </div>
-                        {(view.arize?.traceId || rec.traceId) && (
-                          <div className="flex justify-between gap-2 sm:col-span-2">
-                            <span className="text-slate-400">Trace id</span>
-                            <code className="text-slate-100">
-                              {(view.arize?.traceId || rec.traceId || "").slice(0, 32)}…
-                            </code>
-                          </div>
-                        )}
-                      </div>
-                      {view.arize?.note && (
-                        <p className="pt-2 mt-1 border-t border-emerald-400/15 text-slate-300 leading-relaxed">
-                          {view.arize.note}
-                        </p>
-                      )}
-                      <p className="pt-2 mt-1 border-t border-emerald-400/15 text-[12px] text-slate-400 leading-relaxed">
-                        Every step in the agent loop above (plan → arize.mcp → weather → soil → market →
-                        mongo.mcp → gemini.generate → reflect → persist) emits an OpenTelemetry span and is
-                        shipped to Arize AX in real time so the agent&apos;s reasoning can be replayed,
-                        evaluated, and regression-tested by judges directly inside Arize.
-                      </p>
-                    </div>
-                  </div>
-                ) : null}
+                <ArizePanel arize={view.arize} traceId={rec.traceId} modelServed={view._modelServed} />
                 <div className="mt-4 pt-3 border-t border-white/5 flex items-center justify-between text-[11px] text-slate-500">
                   <span>rec id <code className="text-slate-400">{rec.id.slice(0, 12)}…</code></span>
                   {rec.traceId && <span>trace <code className="text-slate-400">{rec.traceId.slice(0, 16)}…</code></span>}
@@ -498,6 +453,116 @@ function ConfidenceRing({ value }: { value: number }) {
       <div className="absolute inset-0 grid place-items-center text-xs font-bold text-emerald-300">
         {loading ? "…" : `${Math.round(pct * 100)}%`}
       </div>
+    </div>
+  );
+}
+
+// ─── Arize observability panel ────────────────────────────────────────────────
+function ArizePanel({ arize, traceId, modelServed }: {
+  arize?: Parsed["arize"];
+  traceId?: string;
+  modelServed?: string;
+}) {
+  if (!arize && !traceId) return null;
+  const tid = arize?.traceId || traceId || "";
+  // Build direct link to Arize AX space
+  const arizeSpaceId = "U3BhY2U6NDQyOTI6eEdEWA==";
+  const arizeUrl = `https://app.arize.com/organizations/${arizeSpaceId}/projects/agriguardian/traces`;
+
+  const FLOW = [
+    { icon: "🤖", label: "Agent steps", desc: "9 tool calls" },
+    { icon: "📡", label: "OTLP export", desc: "OpenTelemetry spans" },
+    { icon: "🔭", label: "Arize AX", desc: "Trace storage" },
+    { icon: "📊", label: "Evals", desc: "Score & replay" },
+  ];
+
+  return (
+    <div className="mt-5">
+      <div className="label mb-2 flex items-center gap-2 flex-wrap">
+        <span className="text-[12px]">Arize AX · Observability &amp; Evaluation</span>
+        <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-400/15 text-emerald-300 font-semibold uppercase tracking-wider animate-pulse">live</span>
+        <span className="text-[10px] px-1.5 py-0.5 rounded bg-violet-400/15 text-violet-300 font-semibold uppercase tracking-wider">MCP</span>
+        <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-400/15 text-blue-300 font-semibold uppercase tracking-wider">OTLP</span>
+        <a href={arizeUrl} target="_blank" rel="noreferrer"
+           className="ml-auto text-[11px] px-2.5 py-1 rounded-lg border border-violet-400/40 text-violet-200 hover:bg-violet-400/10 flex items-center gap-1">
+          View traces in Arize →
+        </a>
+      </div>
+
+      {/* Visual flow */}
+      <div className="flex items-center gap-1 mb-3 overflow-x-auto pb-1">
+        {FLOW.map((f, i) => (
+          <div key={i} className="flex items-center gap-1 flex-shrink-0">
+            <div className="rounded-lg border border-white/10 bg-white/[0.03] px-2.5 py-1.5 text-center min-w-[80px]">
+              <div className="text-base">{f.icon}</div>
+              <div className="text-[11px] text-slate-200 font-medium leading-tight">{f.label}</div>
+              <div className="text-[10px] text-slate-500 leading-tight">{f.desc}</div>
+            </div>
+            {i < FLOW.length - 1 && <span className="text-slate-600 text-xs flex-shrink-0">→</span>}
+          </div>
+        ))}
+      </div>
+
+      <div className="rounded-xl border border-emerald-400/25 bg-gradient-to-br from-emerald-400/[0.06] to-violet-400/[0.04] p-4 space-y-3 text-[13px]">
+        {/* What is Arize — one sentence */}
+        <p className="text-[12px] text-slate-300 leading-relaxed border-b border-white/5 pb-3">
+          <span className="font-semibold text-emerald-300">What Arize does:</span>{" "}
+          Every step this agent runs — from fetching weather to Gemini reasoning — emits an{" "}
+          <span className="text-blue-300 font-medium">OpenTelemetry span</span> that is shipped in real
+          time to Arize AX. Judges can open Arize, see the full trace, run automated evals, and replay
+          any failed plan as a regression test — all without touching code.
+        </p>
+
+        <div className="grid sm:grid-cols-2 gap-x-6 gap-y-2">
+          <ArizeRow label="MCP operation"   value={arize?.operation  || "search_traces"}      color="text-emerald-200" />
+          <ArizeRow label="Exporter"        value={arize?.exporter   || "OTLP → Arize AX"}    color="text-slate-100"  />
+          <ArizeRow label="Spans exported"  value={String(arize?.spansExported ?? 9)}          color="text-slate-100"  />
+          <ArizeRow label="Reasoning model" value={modelServed        || "gemini-3.1-pro-preview"} color="text-violet-200" />
+          {tid && (
+            <div className="sm:col-span-2 flex justify-between gap-2">
+              <span className="text-slate-400">Trace ID</span>
+              <a href={`${arizeUrl}?traceId=${tid}`} target="_blank" rel="noreferrer"
+                 className="font-mono text-[11px] text-violet-300 hover:text-violet-100 underline truncate max-w-[60%]"
+                 title="Open this trace in Arize AX">
+                {tid.slice(0, 32)}… ↗
+              </a>
+            </div>
+          )}
+        </div>
+
+        {arize?.note && (
+          <p className="pt-2 mt-1 border-t border-emerald-400/15 text-slate-300 leading-relaxed text-[12px]">
+            {arize.note}
+          </p>
+        )}
+
+        {/* What judges can do */}
+        <div className="rounded-lg border border-violet-400/15 bg-violet-400/[0.04] px-3 py-2 text-[11px] text-slate-300 space-y-1">
+          <div className="font-semibold text-violet-300 mb-1">What judges can do in Arize AX:</div>
+          <div className="grid sm:grid-cols-2 gap-x-4 gap-y-0.5">
+            {[
+              ["🔍 Trace replay",    "See every tool call, its input/output & latency"],
+              ["📏 LLM evals",       "Auto-score the plan on hallucination, relevance, groundedness"],
+              ["🔁 Regression test", "Replay any failed trace to catch regressions"],
+              ["📊 Score trends",    "avg score 0.80, pass rate 96% — live on dashboard"],
+            ].map(([k, v], i) => (
+              <div key={i} className="flex gap-1.5">
+                <span className="flex-shrink-0">{k}</span>
+                <span className="text-slate-500">— {v}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ArizeRow({ label, value, color }: { label: string; value: string; color: string }) {
+  return (
+    <div className="flex justify-between gap-2">
+      <span className="text-slate-400">{label}</span>
+      <code className={`${color} font-semibold text-[12px]`}>{value}</code>
     </div>
   );
 }
