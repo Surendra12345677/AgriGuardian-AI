@@ -61,9 +61,11 @@ public class OpenTelemetryConfig {
                 .build();
 
         Resource resource = Resource.getDefault().merge(Resource.create(Attributes.builder()
-                .put(AttributeKey.stringKey("service.name"), cfg.getProjectName())
-                .put(AttributeKey.stringKey("model_id"), cfg.getProjectName())
-                .put(AttributeKey.stringKey("model_version"), SERVICE_VERSION)
+                .put(AttributeKey.stringKey("service.name"),    cfg.getProjectName())
+                .put(AttributeKey.stringKey("model_id"),         cfg.getProjectName())
+                .put(AttributeKey.stringKey("model_version"),    SERVICE_VERSION)
+                // OpenInference resource attrs — tells Arize AX this is an LLM app
+                .put(AttributeKey.stringKey("openinference.project.name"), cfg.getProjectName())
                 .build()));
 
         sdkTracerProvider = SdkTracerProvider.builder()

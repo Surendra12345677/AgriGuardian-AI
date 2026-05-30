@@ -184,7 +184,13 @@ public class AgentOrchestrator {
         if (cache.size() > CACHE_MAX) cache.clear();   // crude bound
 
         Span root = tracer.spanBuilder("agent.run")
-                .setAttribute(AttributeKey.stringKey("farm.id"), req.farmId())
+                // ── OpenInference semantic conventions (Arize AX 2026) ──────────
+                .setAttribute(AttributeKey.stringKey("openinference.span.kind"),  "AGENT")
+                .setAttribute(AttributeKey.stringKey("session.id"),               req.farmId())
+                .setAttribute(AttributeKey.stringKey("user.id"),                  req.farmId())
+                .setAttribute(AttributeKey.stringKey("input.value"),              req.farmId() + "/" + req.scenario() + "/" + req.preferredCrop())
+                // legacy
+                .setAttribute(AttributeKey.stringKey("farm.id"),                  req.farmId())
                 .startSpan();
         try (var rootScope = root.makeCurrent()) {
 
@@ -202,7 +208,9 @@ public class AgentOrchestrator {
 
             // ── plan ────────────────────────────────────────────────────────
             List<String> plan;
-            Span planSpan = tracer.spanBuilder("planner.plan").startSpan();
+            Span planSpan = tracer.spanBuilder("planner.plan")
+                    .setAttribute(AttributeKey.stringKey("openinference.span.kind"), "CHAIN")
+                    .startSpan();
             try (var s = planSpan.makeCurrent()) {
                 // Plan rationale (Arize partner-track integration first):
                 //   1. arize.mcp — retrieve evaluation history of similar past
@@ -231,7 +239,10 @@ public class AgentOrchestrator {
             boolean priorExcellence = false;
 
             for (String toolName : plan) {
-                Span ts = tracer.spanBuilder("tool." + toolName).startSpan();
+                Span ts = tracer.spanBuilder("tool." + toolName)
+                        .setAttribute(AttributeKey.stringKey("openinference.span.kind"), "TOOL")
+                        .setAttribute(AttributeKey.stringKey("tool.name"), toolName)
+                        .startSpan();
                 try (var s = ts.makeCurrent()) {
                     AgentTool tool = tools.require(toolName);
                     Map<String, Object> args = new LinkedHashMap<>();
@@ -255,6 +266,10 @@ public class AgentOrchestrator {
                     toolOutputs.put(toolName, out);
                     ts.setAttribute(AttributeKey.stringKey("tool.source"),
                             String.valueOf(out.getOrDefault("source", "n/a")));
+                    ts.setAttribute(AttributeKey.stringKey("input.value"),
+                            String.valueOf(args).length() > 500 ? String.valueOf(args).substring(0, 500) : String.valueOf(args));
+                    ts.setAttribute(AttributeKey.stringKey("output.value"),
+                            String.valueOf(out).length() > 800 ? String.valueOf(out).substring(0, 800) : String.valueOf(out));
 
                     // ── conditional planning branch ─────────────────────
                     // Look at avg eval score from prior runs (carried in the

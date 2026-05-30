@@ -72,22 +72,36 @@ public class GeminiClientReal implements GeminiClient {
         String model = (cfg.getModel() != null && !cfg.getModel().isBlank())
                 ? cfg.getModel().trim() : "gemini-3.1-pro-preview";
 
+        long promptTokens = (systemPrompt.length() + userPrompt.length()) / 4;
         Span span = tracer.spanBuilder("gemini.generate")
-                .setAttribute(AttributeKey.stringKey("model"), model)
-                .setAttribute(AttributeKey.longKey("prompt.tokens.estimate"),
-                        (long) ((systemPrompt.length() + userPrompt.length()) / 4))
+                // ── OpenInference semantic conventions (Arize AX 2026) ──────────
+                // These make Arize render prompt/response content in the trace UI.
+                .setAttribute(AttributeKey.stringKey("openinference.span.kind"),     "LLM")
+                .setAttribute(AttributeKey.stringKey("llm.model_name"),               model)
+                .setAttribute(AttributeKey.stringKey("llm.provider"),                 "google")
+                .setAttribute(AttributeKey.stringKey("llm.system"),                   "google")
+                .setAttribute(AttributeKey.longKey("llm.token_count.prompt"),         promptTokens)
+                .setAttribute(AttributeKey.stringKey("input.value"),                  truncate(systemPrompt + "\n" + userPrompt, 2000))
+                .setAttribute(AttributeKey.stringKey("input.mime_type"),               "text/plain")
+                // legacy compat
+                .setAttribute(AttributeKey.stringKey("model"),                         model)
+                .setAttribute(AttributeKey.longKey("prompt.tokens.estimate"),          promptTokens)
                 .startSpan();
         try (var scope = span.makeCurrent()) {
             try {
                 String out = doGenerate(systemPrompt, userPrompt, context, span, model);
                 out = stampModelServed(out, model);
-                span.setAttribute(AttributeKey.stringKey("gemini.model.served"), model);
+                span.setAttribute(AttributeKey.stringKey("gemini.model.served"),        model);
+                span.setAttribute(AttributeKey.stringKey("output.value"),               truncate(out, 2000));
+                span.setAttribute(AttributeKey.stringKey("output.mime_type"),           "application/json");
+                span.setAttribute(AttributeKey.longKey("llm.token_count.completion"),   (long)(out.length() / 4));
                 return out;
             } catch (GeminiOfflineSignal sig) {
                 log.error("Gemini model={} unavailable — serving offline plan. Reason: {}",
                         model, sig.getMessage());
-                span.setAttribute(AttributeKey.stringKey("gemini.fallback"), "offline-plan");
-                span.setAttribute(AttributeKey.stringKey("gemini.offline.reason"), sig.getMessage());
+                span.setAttribute(AttributeKey.stringKey("gemini.fallback"),             "offline-plan");
+                span.setAttribute(AttributeKey.stringKey("gemini.offline.reason"),       sig.getMessage());
+                span.setAttribute(AttributeKey.stringKey("output.value"),               "offline-fallback");
                 return offlineDemoPlan(context, sig.getMessage());
             }
         } finally {

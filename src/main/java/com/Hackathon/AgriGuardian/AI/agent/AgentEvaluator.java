@@ -76,7 +76,9 @@ public class AgentEvaluator {
      * Emits an OTel span shipped to Arize AX automatically.
      */
     public EvalResult evaluate(String recommendationJson, Map<String, Object> toolContext) {
-        Span span = tracer.spanBuilder("evaluator.eval").startSpan();
+        Span span = tracer.spanBuilder("evaluator.eval")
+                .setAttribute(AttributeKey.stringKey("openinference.span.kind"), "CHAIN")
+                .startSpan();
         try (var s = span.makeCurrent()) {
             EvalResult r;
             try {
@@ -85,14 +87,19 @@ public class AgentEvaluator {
                 log.warn("LLM judge failed ({}) — falling back to rubric scorer", ex.toString());
                 r = evaluateRubric(recommendationJson, toolContext);
             }
-            // These attributes follow Arize "evals" span conventions so the AX
-            // UI groups + filters them as evaluation telemetry, not raw spans.
-            span.setAttribute(AttributeKey.stringKey("eval.judge"), r.judge());
-            span.setAttribute(AttributeKey.doubleKey("eval.score.relevance"), r.relevance());
-            span.setAttribute(AttributeKey.doubleKey("eval.score.groundedness"), r.groundedness());
-            span.setAttribute(AttributeKey.doubleKey("eval.score.agronomic_correctness"), r.agronomicCorrectness());
-            span.setAttribute(AttributeKey.doubleKey("eval.score.hallucination_risk"), r.hallucinationRisk());
-            span.setAttribute(AttributeKey.doubleKey("eval.score.aggregate"), r.aggregate());
+            // OpenInference + Arize eval span conventions
+            span.setAttribute(AttributeKey.stringKey("eval.judge"),                            r.judge());
+            span.setAttribute(AttributeKey.doubleKey("eval.score.relevance"),                  r.relevance());
+            span.setAttribute(AttributeKey.doubleKey("eval.score.groundedness"),               r.groundedness());
+            span.setAttribute(AttributeKey.doubleKey("eval.score.agronomic_correctness"),      r.agronomicCorrectness());
+            span.setAttribute(AttributeKey.doubleKey("eval.score.hallucination_risk"),         r.hallucinationRisk());
+            span.setAttribute(AttributeKey.doubleKey("eval.score.aggregate"),                  r.aggregate());
+            // Binary pass/fail label — Arize groups these in the Evals tab
+            span.setAttribute(AttributeKey.stringKey("eval.label"),                            r.aggregate() >= 0.70 ? "pass" : "fail");
+            span.setAttribute(AttributeKey.booleanKey("eval.passed"),                          r.aggregate() >= 0.70);
+            span.setAttribute(AttributeKey.stringKey("output.value"),
+                    String.format("{\"aggregate\":%.3f,\"relevance\":%.3f,\"groundedness\":%.3f,\"agronomic\":%.3f,\"hallucination\":%.3f,\"judge\":\"%s\"}",
+                            r.aggregate(), r.relevance(), r.groundedness(), r.agronomicCorrectness(), r.hallucinationRisk(), r.judge()));
             return r;
         } finally {
             span.end();

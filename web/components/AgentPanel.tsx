@@ -12,9 +12,12 @@ type Parsed = {
   confidence?: number;
   impact?: Impact;
   risks?: string[];
-  _source?: string;     // "offline-fallback" when Gemini unavailable
+  _source?: string;
   _reason?: string;
-  _modelServed?: string; // actual model that answered (injected by backend)
+  _modelServed?: string;
+  evalScore?: number;
+  evalDetails?: { relevance?: number; groundedness?: number; agronomicCorrectness?: number; hallucinationRisk?: number; aggregate?: number; judge?: string };
+  evalJudge?: string;
   _basis?: {
     season?: string;
     month?: number;
@@ -385,7 +388,7 @@ export default function AgentPanel({
                     </ul>
                   </div>
                 )}
-                <ArizePanel arize={view.arize} traceId={rec.traceId} modelServed={view._modelServed} />
+                <ArizePanel arize={view.arize} traceId={rec.traceId} modelServed={view._modelServed} evalScore={view.evalScore} evalDetails={view.evalDetails} evalJudge={view.evalJudge} />
                 <div className="mt-4 pt-3 border-t border-white/5 flex items-center justify-between text-[11px] text-slate-500">
                   <span>rec id <code className="text-slate-400">{rec.id.slice(0, 12)}…</code></span>
                   {rec.traceId && <span>trace <code className="text-slate-400">{rec.traceId.slice(0, 16)}…</code></span>}
@@ -458,10 +461,13 @@ function ConfidenceRing({ value }: { value: number }) {
 }
 
 // ─── Arize observability panel ────────────────────────────────────────────────
-function ArizePanel({ arize, traceId, modelServed }: {
+function ArizePanel({ arize, traceId, modelServed, evalScore, evalDetails, evalJudge }: {
   arize?: Parsed["arize"];
   traceId?: string;
   modelServed?: string;
+  evalScore?: number;
+  evalDetails?: Parsed["evalDetails"];
+  evalJudge?: string;
 }) {
   if (!arize && !traceId) return null;
   const tid = arize?.traceId || traceId || "";
@@ -502,6 +508,45 @@ function ArizePanel({ arize, traceId, modelServed }: {
           </div>
         ))}
       </div>
+
+      {/* Inline eval scorecard — shows when LLM judge has scored this result */}
+      {evalDetails && (
+        <div className="mb-3 rounded-lg border border-violet-400/20 bg-violet-400/[0.04] p-3">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-[11px] font-semibold text-violet-300">LLM-as-Judge eval</span>
+            {evalJudge && <span className="text-[10px] px-1.5 py-0.5 rounded bg-violet-400/20 text-violet-200">{evalJudge}</span>}
+            {evalScore != null && (
+              <span className={`ml-auto text-[11px] font-bold ${evalScore >= 0.75 ? "text-emerald-300" : evalScore >= 0.6 ? "text-cyan-300" : "text-amber-300"}`}>
+                {evalScore >= 0.75 ? "✓ pass" : "⚠ needs review"} · {evalScore.toFixed(3)}
+              </span>
+            )}
+          </div>
+          <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
+            {([
+              ["relevance",           "Relevance"],
+              ["groundedness",        "Groundedness"],
+              ["agronomicCorrectness","Agronomic"],
+              ["hallucinationRisk",   "Hallucination Risk"],
+            ] as [keyof NonNullable<Parsed["evalDetails"]>, string][]).map(([k, label]) => {
+              const v = evalDetails[k];
+              if (v == null) return null;
+              const pct = Math.round(v * 100);
+              const c = v >= 0.8 ? "bg-emerald-400" : v >= 0.6 ? "bg-cyan-400" : "bg-amber-400";
+              return (
+                <div key={k}>
+                  <div className="flex justify-between text-[10px] mb-0.5">
+                    <span className="text-slate-400">{label}</span>
+                    <span className={v >= 0.8 ? "text-emerald-300" : v >= 0.6 ? "text-cyan-300" : "text-amber-300"}>{v.toFixed(2)}</span>
+                  </div>
+                  <div className="h-1 w-full rounded-full bg-white/[0.05] overflow-hidden">
+                    <div className={`h-full rounded-full ${c}`} style={{ width: `${pct}%` }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <div className="rounded-xl border border-emerald-400/25 bg-gradient-to-br from-emerald-400/[0.06] to-violet-400/[0.04] p-4 space-y-3 text-[13px]">
         {/* What is Arize — one sentence */}
