@@ -256,7 +256,7 @@ export default function AgentPanel({
                 <div className="mt-3 grid grid-cols-3 gap-2 text-center">
                   <Metric k="Latency" v={latencyMs ? `${latencyMs}ms` : "—"} />
                   <Metric k="Model"   v={view._source === "offline-fallback" ? "offline" : (view._modelServed ?? "gemini-3.1-pro-preview")} />
-                  <Metric k="Tools"   v="5" />
+                  <Metric k="Spans"   v={view._source === "offline-fallback" ? "0" : "9"} />
                 </div>
                 {view.impact && <div className="mt-4"><ImpactDashboard impact={view.impact} /></div>}
                 {view._basis && (
@@ -471,15 +471,22 @@ function ArizePanel({ arize, traceId, modelServed, evalScore, evalDetails, evalJ
 }) {
   if (!arize && !traceId) return null;
   const tid = arize?.traceId || traceId || "";
-  // Build direct link to Arize AX space
-  const arizeSpaceId = "U3BhY2U6NDQyOTI6eEdEWA==";
-  const arizeUrl = `https://app.arize.com/organizations/${arizeSpaceId}/projects/agriguardian/traces`;
+  // Arize space / project come from NEXT_PUBLIC_ env vars so no value is
+  // hardcoded in source.  They default to the hackathon project settings.
+  const arizeSpaceId   = process.env.NEXT_PUBLIC_ARIZE_SPACE_ID    ?? "";
+  const arizeProject   = process.env.NEXT_PUBLIC_ARIZE_PROJECT_NAME ?? "agriguardian-ai";
+  const arizeOrgBase   = arizeSpaceId
+    ? `https://app.arize.com/organizations/${arizeSpaceId}`
+    : "https://app.arize.com";
+  const arizeUrl = `${arizeOrgBase}/projects/${arizeProject}/traces`;
+
+  const spanCount = arize?.spansExported ?? 9;
 
   const FLOW = [
-    { icon: "🤖", label: "Agent steps", desc: "9 tool calls" },
-    { icon: "📡", label: "OTLP export", desc: "OpenTelemetry spans" },
-    { icon: "🔭", label: "Arize AX", desc: "Trace storage" },
-    { icon: "📊", label: "Evals", desc: "Score & replay" },
+    { icon: "🤖", label: "Agent steps",  desc: `${spanCount} OTel spans` },
+    { icon: "📡", label: "OTLP export",  desc: "OpenTelemetry → Arize" },
+    { icon: "🔭", label: "Arize AX",     desc: "Trace + eval storage" },
+    { icon: "⚖️", label: "LLM judge",   desc: "4-dim score + replay" },
   ];
 
   return (
@@ -561,7 +568,7 @@ function ArizePanel({ arize, traceId, modelServed, evalScore, evalDetails, evalJ
         <div className="grid sm:grid-cols-2 gap-x-6 gap-y-2">
           <ArizeRow label="MCP operation"   value={arize?.operation  || "search_traces"}      color="text-emerald-200" />
           <ArizeRow label="Exporter"        value={arize?.exporter   || "OTLP → Arize AX"}    color="text-slate-100"  />
-          <ArizeRow label="Spans exported"  value={String(arize?.spansExported ?? 9)}          color="text-slate-100"  />
+          <ArizeRow label="Spans exported"  value={String(spanCount)}                           color="text-slate-100"  />
           <ArizeRow label="Reasoning model" value={modelServed        || "gemini-3.1-pro-preview"} color="text-violet-200" />
           {tid && (
             <div className="sm:col-span-2 flex justify-between gap-2">
@@ -587,9 +594,9 @@ function ArizePanel({ arize, traceId, modelServed, evalScore, evalDetails, evalJ
           <div className="grid sm:grid-cols-2 gap-x-4 gap-y-0.5">
             {[
               ["🔍 Trace replay",    "See every tool call, its input/output & latency"],
-              ["📏 LLM evals",       "Auto-score the plan on hallucination, relevance, groundedness"],
+              ["⚖️ LLM evals",      "Auto-score on hallucination, relevance, groundedness"],
               ["🔁 Regression test", "Replay any failed trace to catch regressions"],
-              ["📊 Score trends",    "avg score 0.80, pass rate 96% — live on dashboard"],
+              ["📊 Score trends",    "Live aggregate from every run — visible on dashboard"],
             ].map(([k, v], i) => (
               <div key={i} className="flex gap-1.5">
                 <span className="flex-shrink-0">{k}</span>

@@ -8,13 +8,16 @@ export type StepKey =
 
 const PIPELINE: { key: StepKey; label: string; sub: string; icon: string; hint: string; ms: number }[] = [
   { key: "plan",      label: "Plan",           sub: "planner.plan",     icon: "🧭", hint: "Builds the reasoning context from your farm profile",        ms: 300  },
-  { key: "arize.mcp", label: "Arize MCP",      sub: "tool.arize.mcp",   icon: "📡", hint: "Pulls past trace history via Model Context Protocol",        ms: 800  },
-  { key: "weather",   label: "Weather",        sub: "tool.weather",     icon: "🌤️", hint: "Fetches 7-day rainfall & temperature for your coordinates",  ms: 1000 },
-  { key: "soil",      label: "Soil",           sub: "tool.soil",        icon: "🪨", hint: "Looks up soil texture & nutrient profile for your location", ms: 600  },
-  { key: "market",    label: "Market prices",  sub: "tool.market",      icon: "💹", hint: "Queries live commodity prices via Gemini real-time search",  ms: 1200 },
-  { key: "mongo.mcp", label: "MongoDB MCP",    sub: "tool.mongo.mcp",   icon: "🍃", hint: "Retrieves your farm history & previous recommendations",     ms: 500  },
-  { key: "generate",  label: "Gemini reasons", sub: "gemini.generate",  icon: "✨", hint: "Gemini 3.1 Pro synthesises all signals into a JSON plan",    ms: 8000 },
-  { key: "reflect",   label: "Reflect",        sub: "reflector.reflect",icon: "🔁", hint: "Self-critique pass — checks for contradictions & bias",      ms: 400  },
+  // Tools now run in parallel — they start simultaneously after 'plan'.
+  // The UI shows them sequentially for readability; each visual step adds
+  // only its marginal contribution to the total (slowest tool ≈ 1.5s).
+  { key: "arize.mcp", label: "Arize MCP",      sub: "tool.arize.mcp",   icon: "📡", hint: "Pulls past trace history via Model Context Protocol",        ms: 400  },
+  { key: "weather",   label: "Weather",        sub: "tool.weather",     icon: "🌤️", hint: "Fetches 7-day rainfall & temperature for your coordinates",  ms: 400  },
+  { key: "soil",      label: "Soil",           sub: "tool.soil",        icon: "🪨", hint: "Looks up soil texture & nutrient profile for your location", ms: 300  },
+  { key: "market",    label: "Market prices",  sub: "tool.market",      icon: "💹", hint: "Queries live commodity prices via Gemini real-time search",  ms: 400  },
+  { key: "mongo.mcp", label: "MongoDB MCP",    sub: "tool.mongo.mcp",   icon: "🍃", hint: "Retrieves your farm history & previous recommendations",     ms: 300  },
+  { key: "generate",  label: "Gemini reasons", sub: "gemini.generate",  icon: "✨", hint: "Gemini 3.1 Pro synthesises all signals into a JSON plan",    ms: 12000 },
+  { key: "reflect",   label: "Reflect",        sub: "reflector.reflect",icon: "🔁", hint: "Self-critique pass — reconciles impact numbers & injects location basis", ms: 400 },
   { key: "persist",   label: "Persist",        sub: "mongo.save",       icon: "💾", hint: "Saves the final plan + trace ID to MongoDB",                ms: 300  },
 ];
 
@@ -80,7 +83,7 @@ export function AgentTrace({
           {running && (
             <span className="text-emerald-300 tabular-nums">{elapsed}s elapsed</span>
           )}
-          <span className="text-slate-500">9 spans · OTLP → Arize</span>
+          <span className="text-slate-500">{PIPELINE.length} spans · OTLP → Arize</span>
         </div>
       </div>
 

@@ -77,7 +77,17 @@ public class AgentEvaluator {
      */
     public EvalResult evaluate(String recommendationJson, Map<String, Object> toolContext) {
         Span span = tracer.spanBuilder("evaluator.eval")
-                .setAttribute(AttributeKey.stringKey("openinference.span.kind"), "CHAIN")
+                // ── OpenInference semantic conventions (Arize AX 2026) ──────────
+                // "EVALUATOR" is the dedicated kind for LLM-as-judge spans —
+                // Arize renders them with a special ⚖️ icon in the trace tree and
+                // groups their scores in the Evals tab automatically.
+                .setAttribute(AttributeKey.stringKey("openinference.span.kind"), "EVALUATOR")
+                // eval.name tells Arize which evaluator template this maps to
+                .setAttribute(AttributeKey.stringKey("eval.name"),               "agriguardian-llm-judge")
+                // input.value = the payload being evaluated (truncated for span size)
+                .setAttribute(AttributeKey.stringKey("input.value"),
+                        recommendationJson != null && recommendationJson.length() > 1000
+                                ? recommendationJson.substring(0, 1000) + "..." : (recommendationJson != null ? recommendationJson : ""))
                 .startSpan();
         try (var s = span.makeCurrent()) {
             EvalResult r;

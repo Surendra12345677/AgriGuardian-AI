@@ -69,7 +69,7 @@ services:
       MONGODB_URI: mongodb://mongo:27017/agriguardian
       # Pulled from .env (docker compose auto-loads it). Empty → stub mode.
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
-      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3-pro-preview}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.1-pro-preview}
       GEMINI_STUB_MODE: ${GEMINI_STUB_MODE:-auto}
       # Arize AX — observability (partner-track channel)
       ARIZE_ENABLED:        ${ARIZE_ENABLED:-false}
@@ -101,6 +101,9 @@ services:
     environment:
       BACKEND_URL: http://app:8080
       NEXT_TELEMETRY_DISABLED: "1"
+      # Arize — baked into JS bundle so the UI links to the right Arize project.
+      NEXT_PUBLIC_ARIZE_SPACE_ID:      ${ARIZE_SPACE_ID:-}
+      NEXT_PUBLIC_ARIZE_PROJECT_NAME:  ${ARIZE_PROJECT_NAME:-agriguardian-ai}
     volumes:
       - ./web:/app
       - web-node-modules:/app/node_modules

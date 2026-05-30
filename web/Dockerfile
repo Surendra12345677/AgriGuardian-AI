@@ -30,6 +30,14 @@ COPY . .
 # Some repos don't ship a public/ folder. Next.js standalone output
 # expects one to exist (even if empty), so create it as a no-op.
 RUN mkdir -p public
+# NEXT_PUBLIC_* vars are baked into the JS bundle at build time by Next.js.
+# Accept them as Docker build args so `gcloud builds submit
+#   --substitutions=_ARIZE_SPACE_ID=...,_ARIZE_PROJECT=...`
+# can override them without rebuilding from scratch.
+ARG NEXT_PUBLIC_ARIZE_SPACE_ID=U3BhY2U6NDQyOTI6eEdEWA==
+ARG NEXT_PUBLIC_ARIZE_PROJECT_NAME=agriguardian-ai
+ENV NEXT_PUBLIC_ARIZE_SPACE_ID=$NEXT_PUBLIC_ARIZE_SPACE_ID
+ENV NEXT_PUBLIC_ARIZE_PROJECT_NAME=$NEXT_PUBLIC_ARIZE_PROJECT_NAME
 RUN npm run build
 
 ############################
