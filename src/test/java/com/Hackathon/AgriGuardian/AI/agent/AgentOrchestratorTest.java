@@ -56,13 +56,14 @@ class AgentOrchestratorTest {
         assertThat(result.getId()).isEqualTo("saved-1");
         assertThat(result.getFarmId()).isEqualTo("farm-1");
 
-        // tool order: weather → soil → market
-        var inOrder = inOrder(weather, soil, market, gemini, repo);
-        inOrder.verify(weather).invoke(any());
-        inOrder.verify(soil).invoke(any());
-        inOrder.verify(market).invoke(any());
-        inOrder.verify(gemini).generate(any(), any(), any());
-        inOrder.verify(repo).save(any(Recommendation.class));
+        // Tools now run in parallel — verify each was called exactly once
+        // (no in-order constraint; Gemini and save must follow tools).
+        verify(weather, times(1)).invoke(any());
+        verify(soil,    times(1)).invoke(any());
+        verify(market,  times(1)).invoke(any());
+        // Gemini and persist must happen after all tools finish.
+        verify(gemini, times(1)).generate(any(), any(), any());
+        verify(repo,   times(1)).save(any(Recommendation.class));
     }
 
     private static AgentTool stubTool(String name, Map<String, Object> output) {

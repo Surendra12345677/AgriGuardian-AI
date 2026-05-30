@@ -21,7 +21,10 @@ import org.springframework.stereotype.Service;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -227,88 +230,109 @@ public class AgentOrchestrator {
                 planSpan.setAttribute(AttributeKey.stringArrayKey("plan.tools"), plan);
             } finally { planSpan.end(); }
 
-            // ── tools ───────────────────────────────────────────────────────
-            Map<String, Object> toolOutputs = new LinkedHashMap<>();
-            // Conditional-branch flag: set when prior Arize evals indicate the
-            // agent has historically struggled with this farm/scenario combo.
-            // When true we (a) fetch a deeper Arize eval payload, and (b)
-            // KEEP the reflect step. When historical scores are excellent
-            // (>=0.85) we skip reflect for a faster response — that is
-            // genuine "agent planning" rather than a fixed pipeline.
-            boolean priorWeakness = false;
+            // ── tools (parallel) ────────────────────────────────────────────
+            // All plan tools are independent — run them concurrently so the
+            // total tool-phase latency equals the slowest single call rather
+            // than the sum of all calls.  arize.mcp.deep (conditional) still
+            // runs sequentially AFTER the parallel batch, because it depends
+            // on the arize.mcp result.
+            Map<String, Object> toolOutputs = new ConcurrentHashMap<>();
+            boolean priorWeakness  = false;
             boolean priorExcellence = false;
 
-            for (String toolName : plan) {
-                Span ts = tracer.spanBuilder("tool." + toolName)
-                        .setAttribute(AttributeKey.stringKey("openinference.span.kind"), "TOOL")
-                        .setAttribute(AttributeKey.stringKey("tool.name"), toolName)
-                        .startSpan();
-                try (var s = ts.makeCurrent()) {
-                    AgentTool tool = tools.require(toolName);
-                    Map<String, Object> args = new LinkedHashMap<>();
-                    args.put("latitude",  req.latitude());
-                    args.put("longitude", req.longitude());
-                    args.put("crop",      req.preferredCrop() == null ? "" : req.preferredCrop());
-                    // Pass farm-record context so tools can honour user-supplied soil/water.
-                    if (farmSoil  != null) args.put("soilType",          farmSoil);
-                    if (farmWater != null) args.put("waterAvailability", farmWater);
-                    // Arize MCP needs an `operation` — we use search_traces to pull
-                    // similar past-run telemetry for in-context grounding.
-                    if ("arize.mcp".equals(toolName)) {
-                        args.put("operation", "search_traces");
-                        args.put("query",
-                                "farm=" + req.farmId()
-                                + " crop=" + (req.preferredCrop() == null ? "*" : req.preferredCrop())
-                                + " scenario=" + (req.scenario() == null ? "BASELINE" : req.scenario()));
-                        args.put("limit", 5);
-                    }
-                    Map<String, Object> out = tool.invoke(args);
-                    toolOutputs.put(toolName, out);
-                    ts.setAttribute(AttributeKey.stringKey("tool.source"),
-                            String.valueOf(out.getOrDefault("source", "n/a")));
-                    ts.setAttribute(AttributeKey.stringKey("input.value"),
-                            String.valueOf(args).length() > 500 ? String.valueOf(args).substring(0, 500) : String.valueOf(args));
-                    ts.setAttribute(AttributeKey.stringKey("output.value"),
-                            String.valueOf(out).length() > 800 ? String.valueOf(out).substring(0, 800) : String.valueOf(out));
+            // Capture OTel context so child threads inherit the current trace span.
+            io.opentelemetry.context.Context otelCtx = io.opentelemetry.context.Context.current();
 
-                    // ── conditional planning branch ─────────────────────
-                    // Look at avg eval score from prior runs (carried in the
-                    // Arize MCP search_traces result). The orchestrator now
-                    // ADAPTS its pipeline based on historical quality:
-                    //   < 0.60 → fetch deeper evaluation context AND keep
-                    //            the reflect/critique step.
-                    //   ≥ 0.85 → trust the model, skip the reflect step.
-                    if ("arize.mcp".equals(toolName)) {
-                        double avg = parseAvgEvalScore(out);
-                        ts.setAttribute(AttributeKey.doubleKey("arize.priorAvgEval"), avg);
-                        if (avg > 0 && avg < 0.60) {
-                            priorWeakness = true;
-                            log.info("Arize MCP signals priorAvgEval={} → fetching deep eval context", avg);
-                            Span deep = tracer.spanBuilder("tool.arize.mcp.deep").startSpan();
-                            try (var ds = deep.makeCurrent()) {
-                                Map<String, Object> deepArgs = new LinkedHashMap<>();
-                                deepArgs.put("operation", "get_evaluations");
-                                deepArgs.put("farm",      req.farmId());
-                                deepArgs.put("scenario",  req.scenario() == null ? "BASELINE" : req.scenario());
-                                deepArgs.put("limit",     10);
-                                try {
-                                    Map<String, Object> deepOut = tool.invoke(deepArgs);
-                                    toolOutputs.put("arize.mcp.deep", deepOut);
-                                    deep.setAttribute(AttributeKey.stringKey("tool.source"),
-                                            String.valueOf(deepOut.getOrDefault("source", "n/a")));
-                                } catch (Exception ignored) {
-                                    deep.setAttribute(AttributeKey.stringKey("tool.source"), "fallback");
-                                }
-                            } finally { deep.end(); }
-                        } else if (avg >= 0.85) {
-                            priorExcellence = true;
-                            log.info("Arize MCP signals priorAvgEval={} → fast path, skipping reflect", avg);
-                        }
+            ExecutorService toolExec = Executors.newFixedThreadPool(Math.max(1, plan.size()));
+            List<CompletableFuture<Void>> toolFutures = new java.util.ArrayList<>();
+
+            for (String toolName : plan) {
+                // Build args on the calling thread (avoids sharing a mutable map).
+                Map<String, Object> args = new LinkedHashMap<>();
+                args.put("latitude",  req.latitude());
+                args.put("longitude", req.longitude());
+                args.put("crop",      req.preferredCrop() == null ? "" : req.preferredCrop());
+                if (farmSoil  != null) args.put("soilType",          farmSoil);
+                if (farmWater != null) args.put("waterAvailability", farmWater);
+                if ("arize.mcp".equals(toolName)) {
+                    args.put("operation", "search_traces");
+                    args.put("query",
+                            "farm=" + req.farmId()
+                            + " crop=" + (req.preferredCrop() == null ? "*" : req.preferredCrop())
+                            + " scenario=" + (req.scenario() == null ? "BASELINE" : req.scenario()));
+                    args.put("limit", 5);
+                }
+
+                AgentTool tool = tools.require(toolName);
+                CompletableFuture<Void> f = CompletableFuture.runAsync(() -> {
+                    // Re-attach to parent OTel trace so spans appear as children.
+                    try (io.opentelemetry.context.Scope otelScope = otelCtx.makeCurrent()) {
+                        Span ts = tracer.spanBuilder("tool." + toolName)
+                                .setAttribute(AttributeKey.stringKey("openinference.span.kind"), "TOOL")
+                                .setAttribute(AttributeKey.stringKey("tool.name"), toolName)
+                                .startSpan();
+                        try (var s = ts.makeCurrent()) {
+                            Map<String, Object> out = tool.invoke(args);
+                            toolOutputs.put(toolName, out);
+                            ts.setAttribute(AttributeKey.stringKey("tool.source"),
+                                    String.valueOf(out.getOrDefault("source", "n/a")));
+                            String argsStr  = String.valueOf(args);
+                            String outStr   = String.valueOf(out);
+                            ts.setAttribute(AttributeKey.stringKey("input.value"),
+                                    argsStr.length()  > 500 ? argsStr.substring(0, 500)  : argsStr);
+                            ts.setAttribute(AttributeKey.stringKey("output.value"),
+                                    outStr.length()   > 800 ? outStr.substring(0, 800)   : outStr);
+                        } catch (Exception ex) {
+                            ts.recordException(ex);
+                            log.warn("Tool {} failed (non-fatal): {}", toolName, ex.toString());
+                            // Do NOT rethrow — one bad tool should not kill the agent.
+                        } finally { ts.end(); }
                     }
-                } catch (Exception ex) {
-                    ts.recordException(ex);
-                    throw ex;
-                } finally { ts.end(); }
+                }, toolExec);
+                toolFutures.add(f);
+            }
+
+            // Wait for all tools to finish (or timeout at 20 s total).
+            try {
+                CompletableFuture.allOf(toolFutures.toArray(new CompletableFuture[0]))
+                        .get(20, java.util.concurrent.TimeUnit.SECONDS);
+            } catch (java.util.concurrent.TimeoutException te) {
+                log.warn("Tool parallel batch timed out after 20 s — proceeding with partial results");
+            } catch (Exception ie) {
+                log.warn("Tool parallel batch interrupted: {}", ie.toString());
+            } finally {
+                toolExec.shutdown();
+            }
+
+            // ── conditional planning branch (after parallel tools) ───────────
+            // Inspect arize.mcp result now that it has completed.
+            if (toolOutputs.containsKey("arize.mcp")) {
+                @SuppressWarnings("unchecked")
+                Map<String, Object> arizeOut = (Map<String, Object>) toolOutputs.get("arize.mcp");
+                double avg = parseAvgEvalScore(arizeOut);
+                if (avg > 0 && avg < 0.60) {
+                    priorWeakness = true;
+                    log.info("Arize MCP signals priorAvgEval={} → fetching deep eval context", avg);
+                    Span deep = tracer.spanBuilder("tool.arize.mcp.deep").startSpan();
+                    try (var ds = deep.makeCurrent()) {
+                        Map<String, Object> deepArgs = new LinkedHashMap<>();
+                        deepArgs.put("operation", "get_evaluations");
+                        deepArgs.put("farm",      req.farmId());
+                        deepArgs.put("scenario",  req.scenario() == null ? "BASELINE" : req.scenario());
+                        deepArgs.put("limit",     10);
+                        try {
+                            Map<String, Object> deepOut = tools.require("arize.mcp").invoke(deepArgs);
+                            toolOutputs.put("arize.mcp.deep", deepOut);
+                            deep.setAttribute(AttributeKey.stringKey("tool.source"),
+                                    String.valueOf(deepOut.getOrDefault("source", "n/a")));
+                        } catch (Exception ignored) {
+                            deep.setAttribute(AttributeKey.stringKey("tool.source"), "fallback");
+                        }
+                    } finally { deep.end(); }
+                } else if (avg >= 0.85) {
+                    priorExcellence = true;
+                    log.info("Arize MCP signals priorAvgEval={} → fast path, skipping reflect", avg);
+                }
             }
 
             // ── generate ────────────────────────────────────────────────────

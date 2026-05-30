@@ -42,8 +42,8 @@ public class GeminiClientReal implements GeminiClient {
     // Daily quota exhaustion fast-fails immediately — no point retrying.
     private static final int  MAX_ATTEMPTS      = 2;
     private static final long INITIAL_BACKOFF_MS = 500L;
-    // Cap per-minute back-off so we don't block the request thread for too long.
-    private static final long MAX_BACKOFF_MS     = 6_000L;
+    // Cap per-minute back-off at 2 s so we don't stall the request thread.
+    private static final long MAX_BACKOFF_MS     = 2_000L;
 
     private final RestClient restClient;
     private final AgriGuardianProperties.Gemini cfg;
@@ -115,6 +115,36 @@ public class GeminiClientReal implements GeminiClient {
     }
 
     /**
+     * Build a compact context string for the Gemini prompt.
+     *
+     * <p>Raw tool outputs for {@code arize.mcp} and {@code mongo.mcp} can
+     * easily exceed 2 KB each and don't help Gemini reason about agronomy.
+     * We keep the agronomic tools (weather / soil / market) verbatim and
+     * include only a short summary line for the telemetry tools.</p>
+     */
+    @SuppressWarnings("unchecked")
+    private static String compactContext(Map<String, Object> ctx) {
+        if (ctx == null) return "{}";
+        java.util.LinkedHashMap<String, Object> compact = new java.util.LinkedHashMap<>();
+        for (Map.Entry<String, Object> e : ctx.entrySet()) {
+            String key = e.getKey();
+            Object val = e.getValue();
+            // Always keep scalar fields and the three core data tools.
+            if (val == null || !(val instanceof Map)) {
+                compact.put(key, val);
+            } else if ("weather".equals(key) || "soil".equals(key) || "market".equals(key)) {
+                compact.put(key, val);              // full output — these are small and decision-critical
+            } else {
+                // Telemetry / persistence tools: just carry the source tag.
+                Map<?, ?> m = (Map<?, ?>) val;
+                Object src = m.get("source");
+                compact.put(key, "source=" + (src != null ? src : "n/a"));
+            }
+        }
+        return compact.toString();
+    }
+
+    /**
      * Inject {@code "_modelServed"} into the JSON payload so the UI shows
      * the real model name without hard-coding anything.
      */
@@ -130,12 +160,18 @@ public class GeminiClientReal implements GeminiClient {
 
     private String doGenerate(String systemPrompt, String userPrompt, Map<String, Object> context,
                               Span span, String activeModel) {
-        String prompt = systemPrompt + "\n\nContext:" + context + "\n\nUser:" + userPrompt;
+        // Trim the context map so only compact, decision-relevant fields reach
+        // Gemini.  Raw arize.mcp / mongo.mcp payloads can be many KB and
+        // inflate the prompt token count — and therefore the response latency —
+        // without adding value to the agronomy reasoning.
+        String prompt = systemPrompt + "\n\nContext:" + compactContext(context) + "\n\nUser:" + userPrompt;
 
         // No thinkingConfig — gemini-3-pro-preview returns HTTP 400 with it.
         java.util.LinkedHashMap<String, Object> generationConfig = new java.util.LinkedHashMap<>();
         generationConfig.put("temperature",      0.35);
-        generationConfig.put("maxOutputTokens",  4096);
+        // 1800 tokens is enough for the structured JSON schema we request;
+        // 4096 was over-provisioned and forced Gemini to pad responses.
+        generationConfig.put("maxOutputTokens",  1800);
         generationConfig.put("responseMimeType", "application/json");
         Map<String, Object> body = Map.of(
                 "contents", List.of(Map.of(
