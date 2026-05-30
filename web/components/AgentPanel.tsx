@@ -244,7 +244,7 @@ export default function AgentPanel({
               <>
                 <div className="mt-3 grid grid-cols-3 gap-2 text-center">
                   <Metric k="Latency" v={latencyMs ? `${latencyMs}ms` : "—"} />
-                  <Metric k="Model"   v={view._source === "offline-fallback" ? "offline" : (view._modelServed ?? "gemini-3-pro-preview")} />
+                  <Metric k="Model"   v={view._source === "offline-fallback" ? "offline" : (view._modelServed ?? "gemini-3.1-pro-preview")} />
                   <Metric k="Tools"   v="5" />
                 </div>
                 {view.impact && <div className="mt-4"><ImpactDashboard impact={view.impact} /></div>}

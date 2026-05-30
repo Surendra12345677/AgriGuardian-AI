@@ -65,11 +65,12 @@ public class GeminiClientReal implements GeminiClient {
 
     @Override
     public String generate(String systemPrompt, String userPrompt, Map<String, Object> context) {
-        // We always use the configured primary model — gemini-3-pro-preview.
-        // No fallback to other model families: when billing is added the
-        // primary will serve every request without any code change needed.
+        // Use the configured primary model (gemini-3.1-pro-preview by default).
+        // gemini-3-pro-preview was retired by Google on 2026-05-30; the direct
+        // replacement is gemini-3.1-pro-preview (same Gemini 3 Pro family, confirmed
+        // working HTTP 200, stable through at least Q4 2026).
         String model = (cfg.getModel() != null && !cfg.getModel().isBlank())
-                ? cfg.getModel().trim() : "gemini-3-pro-preview";
+                ? cfg.getModel().trim() : "gemini-3.1-pro-preview";
 
         Span span = tracer.spanBuilder("gemini.generate")
                 .setAttribute(AttributeKey.stringKey("model"), model)
@@ -83,8 +84,8 @@ public class GeminiClientReal implements GeminiClient {
                 span.setAttribute(AttributeKey.stringKey("gemini.model.served"), model);
                 return out;
             } catch (GeminiOfflineSignal sig) {
-                log.error("gemini-3-pro-preview unavailable — serving offline plan. Reason: {}",
-                        sig.getMessage());
+                log.error("Gemini model={} unavailable — serving offline plan. Reason: {}",
+                        model, sig.getMessage());
                 span.setAttribute(AttributeKey.stringKey("gemini.fallback"), "offline-plan");
                 span.setAttribute(AttributeKey.stringKey("gemini.offline.reason"), sig.getMessage());
                 return offlineDemoPlan(context, sig.getMessage());
@@ -139,7 +140,7 @@ public class GeminiClientReal implements GeminiClient {
             String finishReason = extractFinishReason(resp);
             log.warn("Gemini model={} returned empty text. finishReason={}", activeModel, finishReason);
             throw new GeminiOfflineSignal(
-                    "gemini-3-pro-preview returned no content (finishReason=" + finishReason + ")");
+                        "Gemini model=" + activeModel + " returned no content (finishReason=" + finishReason + ")");
         }
         log.debug("Gemini response chars={} model={}", text.length(), activeModel);
         return text;
@@ -170,7 +171,7 @@ public class GeminiClientReal implements GeminiClient {
                         // Daily free-tier quota is fully used. Retrying will keep failing
                         // until midnight Pacific OR billing is enabled. Fast-fail with a
                         // clear operator message so the UI shows the billing fix link.
-                        String msg = "gemini-3-pro-preview free-tier DAILY quota exhausted. "
+                        String msg = "Gemini model=" + activeModel + " free-tier DAILY quota exhausted. "
                                 + "Fix → go to https://aistudio.google.com/apikey, find your key, "
                                 + "click 'Set up billing' / 'Enable Pay-as-you-go' and link your "
                                 + "GCP billing account. The app will work immediately after that with "
@@ -244,18 +245,18 @@ public class GeminiClientReal implements GeminiClient {
     /** Map HTTP status → actionable operator message. */
     private String diagnose(int status, String body, String activeModel) {
         return switch (status) {
-            case 400 -> "HTTP 400: gemini-3-pro-preview rejected the request — prompt may be malformed. "
+            case 400 -> "HTTP 400: model=" + activeModel + " rejected the request — prompt may be malformed. "
                     + "Response: " + truncate(body, 300);
             case 401, 403 -> "HTTP " + status + ": Gemini authentication failed. "
                     + "Check GEMINI_API_KEY is valid AND the GCP project has the 'Generative Language API' enabled. "
                     + "See: https://console.cloud.google.com/apis/credentials";
-            case 404 -> "HTTP 404: gemini-3-pro-preview not found on this API key. "
-                    + "Your project may not have preview-model access yet. "
+            case 404 -> "HTTP 404: model=" + activeModel + " not found on this API key. "
+                    + "The model may have been retired — update GEMINI_MODEL in .env / secrets. "
                     + "Response: " + truncate(body, 200);
-            case 429 -> "HTTP 429: gemini-3-pro-preview quota exceeded. "
+            case 429 -> "HTTP 429: model=" + activeModel + " quota exceeded. "
                     + "Enable Pay-as-you-go at https://aistudio.google.com/apikey. "
                     + "Response: " + truncate(body, 200);
-            default -> "HTTP " + status + " from gemini-3-pro-preview after " + MAX_ATTEMPTS
+            default -> "HTTP " + status + " from model=" + activeModel + " after " + MAX_ATTEMPTS
                     + " attempts. Response: " + truncate(body, 200);
         };
     }

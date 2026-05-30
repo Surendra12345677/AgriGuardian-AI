@@ -45,16 +45,13 @@ management:
 agriguardian:
   gemini:
     api-key: ${GEMINI_API_KEY:}
-    # Default to Gemini 3 Pro Preview (hackathon requirement: agents must be
-    # built with Gemini 3). On the public generativelanguage.googleapis.com
-    # v1beta endpoint the canonical model id is `gemini-3-pro-preview`.
-    # Alternatives: `gemini-3-flash-preview` (cheap/fast),
-    # `gemini-3.1-pro-preview` (latest 3.1 family), or `gemini-2.5-pro`
-    # as a safe fallback if Gemini 3 access is revoked on your key.
-    model: ${GEMINI_MODEL:gemini-3-pro-preview}
-    # No fallback models — we exclusively use gemini-3-pro-preview.
-    # When GCP billing / Pay-as-you-go is enabled the primary will always serve.
-    fallback-models: ${GEMINI_FALLBACK_MODELS:}
+    # Gemini 3.1 Pro Preview — latest non-deprecated Gemini 3 Pro model.
+    # Confirmed working (HTTP 200) on Tier 1 Postpay key as of 2026-05-30.
+    # gemini-3-pro-preview was retired by Google; gemini-3.1-pro-preview is
+    # the direct replacement (same capability, stable until at least Q4 2026).
+    # Fallback: gemini-3.5-flash (newest Gemini 3 family, fast & stable).
+    model: ${GEMINI_MODEL:gemini-3.1-pro-preview}
+    fallback-models: ${GEMINI_FALLBACK_MODELS:gemini-3.5-flash}
     base-url: https://generativelanguage.googleapis.com/v1beta
     stub-mode: ${GEMINI_STUB_MODE:auto}   # auto | always | never
     timeout-seconds: 30
