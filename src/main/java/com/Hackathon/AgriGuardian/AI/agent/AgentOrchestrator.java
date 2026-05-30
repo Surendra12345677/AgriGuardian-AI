@@ -514,71 +514,90 @@ public class AgentOrchestrator {
                 } finally { reflectSpan.end(); }
             }
 
-            // ── evaluate (Arize-style LLM-as-judge) ──────────────────────────
-            // Score the freshly reflected payload. The eval span streams to
-            // Arize AX; the aggregate is persisted on the recommendation so
-            // the /api/v1/eval/quality-trend endpoint can render a chart.
-            AgentEvaluator.EvalResult evalResult = null;
-            if (evaluator != null) {
-                try {
-                    evalResult = evaluator.evaluate(reflected, toolOutputs);
-                } catch (Exception ex) {
-                    log.warn("evaluator failed: {}", ex.toString());
-                }
-            }
-
-            // ── log feedback to Arize MCP ────────────────────────────────────
-            // Closes the observe→learn loop: every run logs its own eval back
-            // to Arize so the NEXT run's search_traces has fresher signal.
-            if (evalResult != null && tools.has("arize.mcp")) {
-                Span fb = tracer.spanBuilder("tool.arize.mcp.feedback").startSpan();
-                try (var fs = fb.makeCurrent()) {
-                    Map<String, Object> fbArgs = new LinkedHashMap<>();
-                    fbArgs.put("operation",     "log_feedback");
-                    fbArgs.put("traceId",       root.getSpanContext().getTraceId());
-                    fbArgs.put("farm",          req.farmId());
-                    fbArgs.put("scenario",      req.scenario() == null ? "BASELINE" : req.scenario());
-                    fbArgs.put("score",         evalResult.aggregate());
-                    fbArgs.put("relevance",     evalResult.relevance());
-                    fbArgs.put("groundedness",  evalResult.groundedness());
-                    fbArgs.put("agronomic",     evalResult.agronomicCorrectness());
-                    fbArgs.put("hallucination", evalResult.hallucinationRisk());
-                    fbArgs.put("judge",         evalResult.judge());
-                    try {
-                        Map<String, Object> fbOut = tools.require("arize.mcp").invoke(fbArgs);
-                        fb.setAttribute(AttributeKey.stringKey("tool.source"),
-                                String.valueOf(fbOut.getOrDefault("source", "n/a")));
-                    } catch (Exception ex) {
-                        fb.setAttribute(AttributeKey.stringKey("tool.source"), "fallback");
-                    }
-                } finally { fb.end(); }
-            }
-
+            // ── persist ─────────────────────────────────────────────────────
+            // Save immediately so the user gets a response at once.
+            // evalScore / evalDetails are filled by the async evaluator below.
             Recommendation rec = Recommendation.builder()
                     .farmId(req.farmId())
                     .reasoning(reflected)
-                    .confidenceScore(evalResult != null ? evalResult.aggregate() : 0.78)
+                    .confidenceScore(0.78)   // placeholder — updated async
                     .traceId(root.getSpanContext().getTraceId())
-                    .evalScore(evalResult != null ? evalResult.aggregate() : null)
-                    .evalDetails(evalResult != null ? evalResult.toMap() : null)
-                    .evalJudge(evalResult != null ? evalResult.judge() : null)
-                    // Snapshot the inbound request so the Agent Feedback Loop
-                    // endpoint can replay this exact call later, even if the
-                    // user has since deleted the farm or changed its profile.
                     .requestSnapshot(snapshotOf(req))
                     .build();
             Recommendation saved = repo.save(rec);
             log.info("Persisted recommendation id={} farmId={}", saved.getId(), saved.getFarmId());
-            // Only cache *live* Gemini results — offline fallbacks must be
-            // re-tried on the next request so a transient quota error doesn't
-            // pin the demo to a stub answer for an hour.
+
+            // Cache immediately — only live (non-offline) results.
             boolean offline = reflected != null && reflected.contains("\"_source\":\"offline-fallback\"");
             if (offline) {
-                log.warn("Gemini returned offline-fallback for farmId={} — NOT caching, will retry on next call",
-                        req.farmId());
+                log.warn("Gemini returned offline-fallback for farmId={} — NOT caching", req.farmId());
             } else {
                 cache.put(cacheKey, new CachedRec(saved, System.currentTimeMillis() + CACHE_TTL_MS));
             }
+
+            // ── evaluate ASYNC (Arize-style LLM-as-judge) ───────────────────
+            // The evaluator makes a second Gemini call (~15-20 s). Running it
+            // async means the user gets the recommendation immediately while
+            // the eval score is written to MongoDB in the background.
+            // The EvalQualityCard polls /eval/quality-trend every 6 s so the
+            // score appears in the dashboard within seconds of completing.
+            if (evaluator != null && !offline) {
+                final String savedId  = saved.getId();
+                final String cKey     = cacheKey;
+                final Map<String, Object> toolSnap   = Map.copyOf(toolOutputs);
+                final String traceIdStr = root.getSpanContext().getTraceId();
+                final String scenarioStr = req.scenario() == null ? "BASELINE" : req.scenario();
+                final io.opentelemetry.context.Context evalOtelCtx =
+                        io.opentelemetry.context.Context.current();
+
+                CompletableFuture.runAsync(() -> {
+                    try (io.opentelemetry.context.Scope sc = evalOtelCtx.makeCurrent()) {
+                        AgentEvaluator.EvalResult er = evaluator.evaluate(reflected, toolSnap);
+                        // Persist eval score on the recommendation.
+                        repo.findById(savedId).ifPresent(r -> {
+                            r.setEvalScore(er.aggregate());
+                            r.setEvalDetails(er.toMap());
+                            r.setEvalJudge(er.judge());
+                            r.setConfidenceScore(er.aggregate());
+                            Recommendation scored = repo.save(r);
+                            log.info("Async eval done id={} score={}", savedId, er.aggregate());
+                            // Refresh cache entry with scored version.
+                            CachedRec current = cache.get(cKey);
+                            if (current != null) {
+                                cache.put(cKey, new CachedRec(scored, current.expiresAt()));
+                            }
+                        });
+                        // ── log feedback to Arize MCP ─────────────────────
+                        if (tools.has("arize.mcp")) {
+                            Span fb = tracer.spanBuilder("tool.arize.mcp.feedback").startSpan();
+                            try (var fs = fb.makeCurrent()) {
+                                Map<String, Object> fbArgs = new LinkedHashMap<>();
+                                fbArgs.put("operation",     "log_feedback");
+                                fbArgs.put("traceId",       traceIdStr);
+                                fbArgs.put("farm",          req.farmId());
+                                fbArgs.put("scenario",      scenarioStr);
+                                fbArgs.put("score",         er.aggregate());
+                                fbArgs.put("relevance",     er.relevance());
+                                fbArgs.put("groundedness",  er.groundedness());
+                                fbArgs.put("agronomic",     er.agronomicCorrectness());
+                                fbArgs.put("hallucination", er.hallucinationRisk());
+                                fbArgs.put("judge",         er.judge());
+                                try {
+                                    Map<String, Object> fbOut =
+                                            tools.require("arize.mcp").invoke(fbArgs);
+                                    fb.setAttribute(AttributeKey.stringKey("tool.source"),
+                                            String.valueOf(fbOut.getOrDefault("source", "n/a")));
+                                } catch (Exception ex) {
+                                    fb.setAttribute(AttributeKey.stringKey("tool.source"), "fallback");
+                                }
+                            } finally { fb.end(); }
+                        }
+                    } catch (Exception ex) {
+                        log.warn("async evaluator failed for id={}: {}", savedId, ex.toString());
+                    }
+                });
+            }
+
             return saved;
         } finally {
             root.end();

@@ -169,9 +169,10 @@ public class GeminiClientReal implements GeminiClient {
         // No thinkingConfig — gemini-3-pro-preview returns HTTP 400 with it.
         java.util.LinkedHashMap<String, Object> generationConfig = new java.util.LinkedHashMap<>();
         generationConfig.put("temperature",      0.35);
-        // 1800 tokens is enough for the structured JSON schema we request;
-        // 4096 was over-provisioned and forced Gemini to pad responses.
-        generationConfig.put("maxOutputTokens",  1800);
+        // 2500 tokens: enough head-room for advice (2-3 sentences) + 8 tasks +
+        // impact + risks with comfortable margin.  1800 was too tight and caused
+        // the JSON to be truncated → parse failure → raw text shown in the UI.
+        generationConfig.put("maxOutputTokens",  2500);
         generationConfig.put("responseMimeType", "application/json");
         Map<String, Object> body = Map.of(
                 "contents", List.of(Map.of(

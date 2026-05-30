@@ -118,9 +118,18 @@ export default function AgentPanel({
   const parsed: Parsed = (() => {
     const raw = (rec?.reasoning ?? "").trim();
     if (!raw) return {};
+    // 1. Direct parse (ideal — responseMimeType:json gives clean output)
     try { return JSON.parse(raw); } catch {}
-    const m = raw.match(/\{[\s\S]*\}/);
+    // 2. Strip markdown fences and retry (some models still wrap in ```json)
+    const noFence = raw
+      .replace(/^```(?:json)?\s*/i, "")
+      .replace(/\s*```\s*$/, "")
+      .trim();
+    try { return JSON.parse(noFence); } catch {}
+    // 3. Extract first {...} block (handles leading/trailing garbage)
+    const m = noFence.match(/\{[\s\S]*\}/);
     if (m) { try { return JSON.parse(m[0]); } catch {} }
+    // 4. Last resort — show whatever text is there as advice
     return { advice: raw };
   })();
   const usedFallback = !!rec
@@ -128,7 +137,7 @@ export default function AgentPanel({
   const view: Parsed = parsed;
   const noStructured = usedFallback;
   const latencyMs = tStart && tEnd ? Math.round(tEnd - tStart) : null;
-  const conf = view.confidence ?? (rec?.confidenceScore ?? 0);
+  const conf = view.confidence ?? (rec?.evalScore ?? rec?.confidenceScore ?? 0);
   return (
     <div className="space-y-4">
       <div className="card p-5">
@@ -388,7 +397,10 @@ export default function AgentPanel({
                     </ul>
                   </div>
                 )}
-                <ArizePanel arize={view.arize} traceId={rec.traceId} modelServed={view._modelServed} evalScore={view.evalScore} evalDetails={view.evalDetails} evalJudge={view.evalJudge} />
+                <ArizePanel arize={view.arize} traceId={rec.traceId} modelServed={view._modelServed}
+                  evalScore={view.evalScore ?? rec.evalScore ?? undefined}
+                  evalDetails={view.evalDetails ?? rec.evalDetails ?? undefined}
+                  evalJudge={view.evalJudge ?? rec.evalJudge ?? undefined} />
                 <div className="mt-4 pt-3 border-t border-white/5 flex items-center justify-between text-[11px] text-slate-500">
                   <span>rec id <code className="text-slate-400">{rec.id.slice(0, 12)}…</code></span>
                   {rec.traceId && <span>trace <code className="text-slate-400">{rec.traceId.slice(0, 16)}…</code></span>}

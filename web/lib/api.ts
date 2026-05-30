@@ -24,6 +24,19 @@ export type Recommendation = {
   confidenceScore: number;
   traceId?: string;
   createdAt: string;
+  // Arize-style LLM-as-judge eval — filled async after the main response.
+  // These fields ARE serialised by the Spring controller even though the UI
+  // may show them a few seconds after the recommendation is first returned.
+  evalScore?: number | null;
+  evalDetails?: {
+    relevance?: number;
+    groundedness?: number;
+    agronomicCorrectness?: number;
+    hallucinationRisk?: number;
+    aggregate?: number;
+    judge?: string;
+  } | null;
+  evalJudge?: string | null;
 };
 
 export type Scenario = "BASELINE" | "DROUGHT" | "PRICE_CRASH" | "PEST_OUTBREAK";
