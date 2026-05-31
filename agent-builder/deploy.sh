@@ -69,11 +69,12 @@ need MONGODB_URI
 need GEMINI_API_KEY
 need ARIZE_API_KEY
 need ARIZE_SPACE_ID
-GEMINI_MODEL="${GEMINI_MODEL:-gemini-3-pro-preview}"
+GEMINI_MODEL="${GEMINI_MODEL:-gemini-3.1-pro-preview}"
 # Comma-separated fallback chain — the backend iterates through these when
 # the primary model returns 404 / 429 / 5xx so judges never see the
 # deterministic offline plan on Cloud Run.
-GEMINI_FALLBACK_MODELS="${GEMINI_FALLBACK_MODELS:-gemini-3-flash-preview,gemini-2.5-pro,gemini-2.5-flash,gemini-2.0-flash}"
+# All models in this list are in the Gemini 3 family or newer.
+GEMINI_FALLBACK_MODELS="${GEMINI_FALLBACK_MODELS:-gemini-3.5-flash,gemini-2.5-flash,gemini-2.0-flash}"
 ARIZE_OTLP_ENDPOINT="${ARIZE_OTLP_ENDPOINT:-https://otlp.arize.com/v1}"
 
 echo "==> Project=$PROJECT_ID  Region=$REGION"

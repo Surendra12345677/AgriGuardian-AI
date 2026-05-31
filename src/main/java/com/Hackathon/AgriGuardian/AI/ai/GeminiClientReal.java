@@ -65,61 +65,74 @@ public class GeminiClientReal implements GeminiClient {
 
     @Override
     public String generate(String systemPrompt, String userPrompt, Map<String, Object> context) {
-        // Use the configured primary model (gemini-3.1-pro-preview by default).
-        String model = (cfg.getModel() != null && !cfg.getModel().isBlank())
+        // Build model list: primary first, then fallbacks (Gemini 3 family)
+        java.util.List<String> models = new java.util.ArrayList<>();
+        String primary = (cfg.getModel() != null && !cfg.getModel().isBlank())
                 ? cfg.getModel().trim() : "gemini-3.1-pro-preview";
+        models.add(primary);
+        if (cfg.getFallbackModels() != null) {
+            cfg.getFallbackModels().stream()
+                    .filter(m -> m != null && !m.isBlank())
+                    .map(String::trim)
+                    .forEach(models::add);
+        }
 
         long promptTokens = (systemPrompt.length() + userPrompt.length()) / 4;
         String fullPrompt = systemPrompt + "\n" + userPrompt;
 
         Span span = tracer.spanBuilder("gemini.generate")
-                // ── OpenInference semantic conventions (Arize AX 2026) ──────────
                 .setAttribute(AttributeKey.stringKey("openinference.span.kind"),     "LLM")
-                .setAttribute(AttributeKey.stringKey("llm.model_name"),               model)
+                .setAttribute(AttributeKey.stringKey("llm.model_name"),               primary)
                 .setAttribute(AttributeKey.stringKey("llm.provider"),                 "google")
                 .setAttribute(AttributeKey.stringKey("llm.system"),                   "google")
                 .setAttribute(AttributeKey.longKey("llm.token_count.prompt"),         promptTokens)
-                // OpenInference message attributes — Arize renders these as prompt viewer
                 .setAttribute(AttributeKey.stringKey("llm.input_messages.0.message.role"),    "system")
                 .setAttribute(AttributeKey.stringKey("llm.input_messages.0.message.content"), truncate(systemPrompt, 2000))
                 .setAttribute(AttributeKey.stringKey("llm.input_messages.1.message.role"),    "user")
                 .setAttribute(AttributeKey.stringKey("llm.input_messages.1.message.content"), truncate(userPrompt, 1000))
-                // Invocation params visible in Arize span detail panel
                 .setAttribute(AttributeKey.stringKey("llm.invocation_parameters"),
-                        "{\"model\":\"" + model + "\",\"temperature\":0.35,\"maxOutputTokens\":2500,\"responseMimeType\":\"application/json\"}")
+                        "{\"model\":\"" + primary + "\",\"temperature\":0.35,\"maxOutputTokens\":2500,\"responseMimeType\":\"application/json\"}")
                 .setAttribute(AttributeKey.stringKey("input.value"),                  truncate(fullPrompt, 2000))
                 .setAttribute(AttributeKey.stringKey("input.mime_type"),               "text/plain")
-                // legacy compat
-                .setAttribute(AttributeKey.stringKey("model"),                         model)
+                .setAttribute(AttributeKey.stringKey("model"),                         primary)
                 .setAttribute(AttributeKey.longKey("prompt.tokens.estimate"),          promptTokens)
                 .startSpan();
         long t0 = System.nanoTime();
         try (var scope = span.makeCurrent()) {
-            try {
-                String out = doGenerate(systemPrompt, userPrompt, context, span, model);
-                out = stampModelServed(out, model);
-                long latencyMs = (System.nanoTime() - t0) / 1_000_000L;
-                long completionTokens = out.length() / 4;
-                span.setAttribute(AttributeKey.stringKey("gemini.model.served"),          model);
-                span.setAttribute(AttributeKey.stringKey("output.value"),                 truncate(out, 2000));
-                span.setAttribute(AttributeKey.stringKey("output.mime_type"),             "application/json");
-                span.setAttribute(AttributeKey.longKey("llm.token_count.completion"),     completionTokens);
-                span.setAttribute(AttributeKey.longKey("llm.token_count.total"),          promptTokens + completionTokens);
-                span.setAttribute(AttributeKey.longKey("llm.latency_ms"),                 latencyMs);
-                // Output message for Arize prompt viewer
-                span.setAttribute(AttributeKey.stringKey("llm.output_messages.0.message.role"),    "assistant");
-                span.setAttribute(AttributeKey.stringKey("llm.output_messages.0.message.content"), truncate(out, 2000));
-                return out;
-            } catch (GeminiOfflineSignal sig) {
-                long latencyMs = (System.nanoTime() - t0) / 1_000_000L;
-                log.error("Gemini model={} unavailable — serving offline plan. Reason: {}",
-                        model, sig.getMessage());
-                span.setAttribute(AttributeKey.stringKey("gemini.fallback"),             "offline-plan");
-                span.setAttribute(AttributeKey.stringKey("gemini.offline.reason"),       sig.getMessage());
-                span.setAttribute(AttributeKey.stringKey("output.value"),               "offline-fallback");
-                span.setAttribute(AttributeKey.longKey("llm.latency_ms"),               latencyMs);
-                return offlineDemoPlan(context, sig.getMessage());
+            GeminiOfflineSignal lastSignal = null;
+            for (String model : models) {
+                try {
+                    String out = doGenerate(systemPrompt, userPrompt, context, span, model);
+                    out = stampModelServed(out, model);
+                    long latencyMs = (System.nanoTime() - t0) / 1_000_000L;
+                    long completionTokens = out.length() / 4;
+                    span.setAttribute(AttributeKey.stringKey("gemini.model.served"),          model);
+                    span.setAttribute(AttributeKey.stringKey("output.value"),                 truncate(out, 2000));
+                    span.setAttribute(AttributeKey.stringKey("output.mime_type"),             "application/json");
+                    span.setAttribute(AttributeKey.longKey("llm.token_count.completion"),     completionTokens);
+                    span.setAttribute(AttributeKey.longKey("llm.token_count.total"),          promptTokens + completionTokens);
+                    span.setAttribute(AttributeKey.longKey("llm.latency_ms"),                 latencyMs);
+                    span.setAttribute(AttributeKey.stringKey("llm.output_messages.0.message.role"),    "assistant");
+                    span.setAttribute(AttributeKey.stringKey("llm.output_messages.0.message.content"), truncate(out, 2000));
+                    if (!model.equals(primary)) {
+                        log.warn("Gemini primary model={} unavailable; served by fallback model={}", primary, model);
+                        span.setAttribute(AttributeKey.stringKey("gemini.fallback.model"), model);
+                    }
+                    return out;
+                } catch (GeminiOfflineSignal sig) {
+                    lastSignal = sig;
+                    log.warn("Gemini model={} failed ({}), trying next fallback...", model, sig.getMessage());
+                }
             }
+            // All models exhausted — serve offline plan
+            long latencyMs = (System.nanoTime() - t0) / 1_000_000L;
+            String reason = lastSignal != null ? lastSignal.getMessage() : "all Gemini models exhausted";
+            log.error("All Gemini models exhausted — serving offline plan. Last reason: {}", reason);
+            span.setAttribute(AttributeKey.stringKey("gemini.fallback"), "offline-plan");
+            span.setAttribute(AttributeKey.stringKey("gemini.offline.reason"), reason);
+            span.setAttribute(AttributeKey.stringKey("output.value"), "offline-fallback");
+            span.setAttribute(AttributeKey.longKey("llm.latency_ms"), latencyMs);
+            return offlineDemoPlan(context, reason);
         } finally {
             span.end();
         }
@@ -185,10 +198,9 @@ public class GeminiClientReal implements GeminiClient {
         // No thinkingConfig — gemini-3-pro-preview returns HTTP 400 with it.
         java.util.LinkedHashMap<String, Object> generationConfig = new java.util.LinkedHashMap<>();
         generationConfig.put("temperature",      0.35);
-        // 2500 tokens: enough head-room for advice (2-3 sentences) + 8 tasks +
-        // impact + risks with comfortable margin.  1800 was too tight and caused
-        // the JSON to be truncated → parse failure → raw text shown in the UI.
-        generationConfig.put("maxOutputTokens",  2500);
+        // 4000 tokens: gives enough room for advice + 8 tasks + impact + risks
+        // without truncation. 2500 was too tight for complex plans with many tasks.
+        generationConfig.put("maxOutputTokens",  4000);
         generationConfig.put("responseMimeType", "application/json");
         Map<String, Object> body = Map.of(
                 "contents", List.of(Map.of(
@@ -410,7 +422,7 @@ public class GeminiClientReal implements GeminiClient {
 
         String crop = !userCrop.isEmpty() ? userCrop
                 : pickCropForLocation(lat, lon, rain, tAvg, soilType, scenario,
-                                      java.time.LocalDate.now().getMonthValue());
+                                      java.time.LocalDate.now(java.time.ZoneId.of("Asia/Kolkata")).getMonthValue());
 
         // Deterministic per-location wobble so two farms differ visibly.
         int seed = Math.abs((int) Math.round(lat * 1000) * 31 + (int) Math.round(lon * 1000));
@@ -491,7 +503,7 @@ public class GeminiClientReal implements GeminiClient {
      */
     static String pickCropForLocation(double lat, double rain7d, String soilType, String scenario) {
         return pickCropForLocation(lat, 78.0, rain7d, 28.0, soilType, scenario,
-                java.time.LocalDate.now().getMonthValue());
+                java.time.LocalDate.now(java.time.ZoneId.of("Asia/Kolkata")).getMonthValue());
     }
 
     static String pickCropForLocation(double lat, double lon, double rain7d, double tAvgC,

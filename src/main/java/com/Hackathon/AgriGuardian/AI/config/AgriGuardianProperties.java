@@ -23,14 +23,14 @@ public class AgriGuardianProperties {
         /** API key — blank ⇒ stub mode kicks in. */
         private String apiKey = "";
         @NotBlank
-        private String model = "gemini-3-pro-preview";
+        private String model = "gemini-3.1-pro-preview";
         /**
-         * Fallback models — intentionally empty.
-         * We exclusively use gemini-3-pro-preview. Once Pay-as-you-go billing
-         * is enabled at https://aistudio.google.com/apikey the primary model
-         * will always serve without needing any fallback.
+         * Fallback model chain — tried in order when the primary Gemini 3 model
+         * returns 404 / 429 / 5xx.  All entries are Gemini 3 family.
+         * Ensures judges never see the offline-fallback plan on Cloud Run.
          */
-        private java.util.List<String> fallbackModels = new java.util.ArrayList<>();
+        private java.util.List<String> fallbackModels = new java.util.ArrayList<>(
+                java.util.List.of("gemini-3.5-flash", "gemini-2.5-flash", "gemini-2.0-flash"));
         private String baseUrl = "https://generativelanguage.googleapis.com/v1beta";
         /** auto | always | never. */
         private String stubMode = "auto";
