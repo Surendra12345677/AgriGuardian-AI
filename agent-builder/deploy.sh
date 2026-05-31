@@ -154,6 +154,7 @@ echo "==> [1/2] Building + deploying BACKEND ($BACKEND_SERVICE)"
     --cpu 1 \
     --port 8080 \
     --timeout 300 \
+    --min-instances 1 \
     --max-instances 3 \
     --set-env-vars "$BACKEND_ENV" \
     --set-secrets "$BACKEND_SECRETS" )

@@ -90,8 +90,10 @@ export type EvalDistribution = {
 
 async function http<T>(path: string, init?: RequestInit, timeoutMs = 20_000): Promise<T> {
   // Long-running endpoints (LLM calls) need a longer timeout.
+  // /farms also gets a generous 90s to survive Spring Boot cold-start on Cloud Run.
   const isLongPoll = path.includes("/recommendations") || path.includes("/diagnose") || path.includes("/replay") || path.includes("/scenarios");
-  const ms = isLongPoll ? 120_000 : timeoutMs;
+  const isFarms    = path.includes("/farms") || path.includes("/eval") || path.includes("/arize") || path.includes("/feedback");
+  const ms = isLongPoll ? 150_000 : isFarms ? 90_000 : timeoutMs;
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), ms);

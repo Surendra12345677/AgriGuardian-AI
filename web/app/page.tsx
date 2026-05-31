@@ -79,18 +79,47 @@ export default function HomePage() {
         const isDbDown =
           msg.includes("500") || msg.includes("mongo") ||
           msg.includes("timeout") || msg.includes("connection refused");
+        const isColdStart =
+          msg.includes("aborted") || msg.includes("timed out") || msg.includes("504") || msg.includes("502");
+        const isNoBackendUrl = msg.includes("backend_url");
         return (
           <div className={`card px-4 py-3 text-sm ${isDbDown ? "border-amber-400/30" : "border-red-400/30"}`}>
             {isDbDown ? (
               <>
                 <strong className="text-amber-300">MongoDB is not connected.</strong>
-                {" "}Agent + tool endpoints still work. Start MongoDB or set <code>SPRING_DATA_MONGODB_URI</code>.
+                {" "}Agent + tool endpoints still work. Set <code>SPRING_DATA_MONGODB_URI</code>.
               </>
-            ) : (
+            ) : isNoBackendUrl ? (
               <>
-                <strong className="text-red-300">Backend unreachable</strong>{" "}({bootError}).
-                Ensure Spring Boot is running on <code>localhost:8080</code>.
+                <strong className="text-red-300">Backend URL not configured.</strong>
+                {" "}The <code>BACKEND_URL</code> environment variable is missing on the web service.
+                Re-deploy using <code>./agent-builder/deploy.sh</code>.
               </>
+            ) : isColdStart ? (
+              <div className="flex items-center justify-between flex-wrap gap-3">
+                <span>
+                  <strong className="text-amber-300">⏳ Backend is warming up</strong>
+                  {" "}— Cloud Run cold start can take 60–90 s. Please wait and{" "}
+                  <button onClick={() => { setBoot(null); refresh(); }}
+                          className="underline text-emerald-300 hover:text-emerald-200">
+                    retry
+                  </button>.
+                </span>
+                <button onClick={() => { setBoot(null); refresh(); }}
+                        className="btn-primary text-xs !py-1.5 !px-3 shrink-0">
+                  🔄 Retry now
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between flex-wrap gap-3">
+                <span>
+                  <strong className="text-red-300">Backend unreachable</strong>{" "}— {bootError}.
+                </span>
+                <button onClick={() => { setBoot(null); refresh(); }}
+                        className="btn-primary text-xs !py-1.5 !px-3 shrink-0">
+                  🔄 Retry
+                </button>
+              </div>
             )}
           </div>
         );

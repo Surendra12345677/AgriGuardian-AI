@@ -66,10 +66,11 @@ async function proxy(req: NextRequest, ctx: { params: Promise<{ path: string[] }
   const method = req.method.toUpperCase();
   const hasBody = method !== "GET" && method !== "HEAD";
 
-  // Recommendation calls can take up to 90s (Gemini + tools).
-  // All other endpoints (farm CRUD, evals) time out at 15s.
+  // Recommendation / diagnose calls can take up to 120s (Gemini + tools + 42s market timeout).
+  // Farm CRUD / eval endpoints: allow 90s for Spring Boot cold-start on Cloud Run
+  //   (Java cold start = 60-90s; 15s was too short and caused "Backend unreachable" on every first load).
   const isLongPoll = target.includes("/recommendations") || target.includes("/diagnose") || target.includes("/replay");
-  const timeoutMs  = isLongPoll ? 120_000 : 15_000;
+  const timeoutMs  = isLongPoll ? 150_000 : 90_000;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
