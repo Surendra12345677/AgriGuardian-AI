@@ -238,12 +238,12 @@ export default function AgentPanel({
         )}
       </div>
       {(busy || rec || error) && (
-        <div className="grid lg:grid-cols-5 gap-4 items-start">
-          <div className="lg:col-span-2 space-y-4">
+        <div className="grid lg:grid-cols-[300px_1fr] gap-5 items-start">
+          <div className="space-y-4">
             <AgentTrace running={busy} finished={!!rec} errored={!!error} evalPending={evalPending} evalDone={!evalPending && !!rec && rec.evalScore != null} />
             {farm && <FarmMap lat={farm.latitude} lon={farm.longitude} />}
           </div>
-          <div className="lg:col-span-3">
+          <div>
             {rec ? (
               <ResultCard
                 view={view}
@@ -301,13 +301,13 @@ function Spinner() {
 function ConfidenceRing({ value }: { value: number }) {
   const loading = value < 0;
   const pct = loading ? 0 : Math.max(0, Math.min(1, value));
-  const r = 22, c = 2 * Math.PI * r;
+  const r = 26, c = 2 * Math.PI * r;
   const off = c * (1 - pct);
   return (
-    <div className="relative h-14 w-14">
-      <svg viewBox="0 0 56 56" className={`h-14 w-14 -rotate-90 ${loading ? "animate-spin" : ""}`}>
-        <circle cx="28" cy="28" r={r} stroke="rgba(255,255,255,0.08)" strokeWidth="6" fill="none" />
-        <circle cx="28" cy="28" r={r} stroke="url(#g)" strokeWidth="6" fill="none"
+    <div className="relative h-16 w-16 shrink-0">
+      <svg viewBox="0 0 64 64" className={`h-16 w-16 -rotate-90 ${loading ? "animate-spin" : ""}`}>
+        <circle cx="32" cy="32" r={r} stroke="rgba(255,255,255,0.08)" strokeWidth="6" fill="none" />
+        <circle cx="32" cy="32" r={r} stroke="url(#g)" strokeWidth="6" fill="none"
                 strokeLinecap="round" strokeDasharray={c} strokeDashoffset={loading ? c * 0.75 : off} />
         <defs>
           <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
@@ -316,7 +316,7 @@ function ConfidenceRing({ value }: { value: number }) {
           </linearGradient>
         </defs>
       </svg>
-      <div className="absolute inset-0 grid place-items-center text-xs font-bold text-emerald-300">
+      <div className="absolute inset-0 grid place-items-center text-sm font-bold text-emerald-300">
         {loading ? "…" : `${Math.round(pct * 100)}%`}
       </div>
     </div>
@@ -584,33 +584,11 @@ function ResultCard({
   const isOffline = view._source === "offline-fallback";
 
   return (
-    <div className="space-y-3">
-
-      {/* ── Status bar ── */}
-      <div className="card px-4 py-2.5 flex items-center justify-between gap-3 flex-wrap">
-        <div className="flex items-center gap-2 flex-wrap">
-          {isOffline ? (
-            <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-amber-300 uppercase tracking-wider">
-              <span className="h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse" />Offline fallback
-            </span>
-          ) : (
-            <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-emerald-300 uppercase tracking-wider">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />Live · Gemini 3
-            </span>
-          )}
-          {noStructured && (
-            <span className="text-[10px] text-amber-300/70 font-semibold uppercase tracking-wider">· Unstructured</span>
-          )}
-        </div>
-        <div className="flex items-center gap-3 text-[11px] text-slate-500 font-mono">
-          {latencyMs && <span>{latencyMs}ms</span>}
-          <span>{view._modelServed ?? "gemini-3.1-pro-preview"}</span>
-        </div>
-      </div>
+    <div className="space-y-4">
 
       {/* ── Offline quota notice ── */}
       {isOffline && view._reason?.includes("quota") && (
-        <div className="rounded-xl border border-amber-400/30 bg-amber-400/[0.05] px-4 py-3 text-sm text-amber-200">
+        <div className="rounded-xl border border-amber-400/30 bg-amber-400/[0.05] px-5 py-4 text-sm text-amber-200">
           <div className="font-semibold text-amber-300 mb-1">⚠ Gemini quota reached — billing fix needed</div>
           <p className="text-[12px] leading-relaxed">
             Visit <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer" className="underline text-amber-100">aistudio.google.com/apikey</a>{" "}
@@ -623,31 +601,53 @@ function ResultCard({
         </div>
       )}
 
-      {/* ── Hero: recommended crop ── */}
-      {view.crop && (
-        <div className="card p-0 overflow-hidden">
+      {/* ── Hero: recommended crop — MAIN FOCUS ── */}
+      {view.crop ? (
+        <div className="rounded-2xl overflow-hidden border border-white/[0.07] shadow-xl shadow-emerald-900/10">
           {/* Gradient header */}
-          <div className="bg-gradient-to-br from-emerald-900/60 via-emerald-950/40 to-slate-900/60 px-5 py-5">
-            <div className="flex items-center justify-between gap-4 flex-wrap">
-              <div>
-                <div className="text-[10px] uppercase tracking-[0.2em] text-emerald-400/70 font-semibold mb-2">
+          <div className="bg-gradient-to-br from-emerald-900/70 via-emerald-950/50 to-slate-900/80 px-6 py-7">
+            {/* Status + latency chips in top row */}
+            <div className="flex items-center gap-2 mb-4 flex-wrap">
+              {isOffline ? (
+                <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-amber-300 uppercase tracking-wider">
+                  <span className="h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse" />Offline fallback
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-emerald-400 uppercase tracking-wider">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />Live · Gemini 3
+                </span>
+              )}
+              {noStructured && <span className="text-[10px] text-amber-300/70 font-semibold uppercase tracking-wider">· Unstructured</span>}
+              {latencyMs && (
+                <span className="ml-auto text-[10px] text-slate-500 font-mono bg-white/[0.04] px-2 py-0.5 rounded-full border border-white/[0.06]">
+                  {latencyMs}ms
+                </span>
+              )}
+              <span className="text-[10px] text-slate-600 font-mono">{view._modelServed ?? "gemini-3.1-pro-preview"}</span>
+            </div>
+
+            {/* Crop name + ring */}
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex-1 min-w-0">
+                <div className="text-[10px] uppercase tracking-[0.25em] text-emerald-400/60 font-semibold mb-2">
                   Recommended Crop
                 </div>
-                <div className="text-4xl font-black text-white capitalize tracking-tight flex items-center gap-2">
-                  🌱 {view.crop}
+                <div className="text-5xl font-black text-white capitalize tracking-tight leading-none flex items-center gap-3 flex-wrap">
+                  <span>🌱</span>
+                  <span>{view.crop}</span>
                 </div>
                 {view._basis?.season && (
-                  <div className="mt-2.5 flex items-center gap-2 flex-wrap">
-                    <span className="text-[11px] px-2.5 py-0.5 rounded-full border border-emerald-400/35 bg-emerald-400/10 text-emerald-300 font-medium">
+                  <div className="mt-3 flex items-center gap-2 flex-wrap">
+                    <span className="text-[11px] px-2.5 py-1 rounded-full border border-emerald-400/35 bg-emerald-400/10 text-emerald-300 font-medium">
                       {view._basis.season} season
                     </span>
                     {view._basis.soil && (
-                      <span className="text-[11px] px-2.5 py-0.5 rounded-full border border-white/15 bg-white/[0.05] text-slate-300">
+                      <span className="text-[11px] px-2.5 py-1 rounded-full border border-white/15 bg-white/[0.05] text-slate-300">
                         {view._basis.soil} soil
                       </span>
                     )}
                     {view._basis.rain7dMm != null && (
-                      <span className="text-[11px] px-2.5 py-0.5 rounded-full border border-blue-400/25 bg-blue-400/[0.07] text-blue-300">
+                      <span className="text-[11px] px-2.5 py-1 rounded-full border border-blue-400/25 bg-blue-400/[0.07] text-blue-300">
                         🌧 {Math.round(view._basis.rain7dMm)}mm rain (7d)
                       </span>
                     )}
@@ -660,54 +660,62 @@ function ResultCard({
 
           {/* Shortlist pills */}
           {Array.isArray(view._basis?.shortlist) && view._basis!.shortlist.length > 0 && (
-            <div className="px-5 py-3 border-t border-white/[0.05]">
-              <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-2">Other suitable crops for this location</div>
-              <div className="flex flex-wrap gap-1.5">
+            <div className="bg-white/[0.02] px-6 py-4 border-t border-white/[0.05]">
+              <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-2.5">Other suitable crops for this location</div>
+              <div className="flex flex-wrap gap-2">
                 {view._basis!.shortlist.map((c, i) => {
                   const picked = view.crop && c.toLowerCase() === view.crop.toLowerCase();
                   return (
                     <button key={i} type="button" disabled={busy || !!picked}
                       onClick={() => onAsk({ cropOverride: c })}
-                      title={picked ? "Currently recommended" : `Re-plan with ${c}`}
-                      className={"px-3 py-1 rounded-full text-[12px] border transition-all " + (
+                      className={"px-3.5 py-1.5 rounded-full text-[12px] border transition-all font-medium " + (
                         picked
-                          ? "border-emerald-400/60 bg-emerald-400/15 text-emerald-200 font-semibold cursor-default"
+                          ? "border-emerald-400/60 bg-emerald-400/15 text-emerald-200 cursor-default"
                           : "border-white/10 bg-white/[0.03] text-slate-300 hover:border-emerald-400/40 hover:text-emerald-200 disabled:opacity-40"
                       )}>
                       {c}{picked ? " ✓" : ""}
                     </button>
                   );
                 })}
-                {view.crop && (
-                  <button type="button" disabled={busy}
-                    onClick={() => { onSetCrop(""); onAsk({ forceLive: true }); }}
-                    className="px-3 py-1 rounded-full text-[12px] border border-slate-400/20 bg-white/[0.03] text-slate-400 hover:text-slate-200 hover:border-slate-400/40 disabled:opacity-40">
-                    🔁 Re-plan
-                  </button>
-                )}
+                <button type="button" disabled={busy}
+                  onClick={() => { onSetCrop(""); onAsk({ forceLive: true }); }}
+                  className="px-3.5 py-1.5 rounded-full text-[12px] border border-slate-400/20 bg-white/[0.03] text-slate-400 hover:text-slate-200 hover:border-slate-400/40 disabled:opacity-40">
+                  🔁 Re-plan
+                </button>
               </div>
             </div>
           )}
         </div>
+      ) : (
+        /* No crop parsed yet but we have a rec — show status bar */
+        <div className="rounded-2xl border border-white/[0.07] bg-white/[0.02] px-5 py-3 flex items-center justify-between gap-3 flex-wrap">
+          <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-emerald-300 uppercase tracking-wider">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />{isOffline ? "Offline fallback" : "Live · Gemini 3"}
+          </span>
+          <div className="flex items-center gap-3 text-[11px] text-slate-500 font-mono">
+            {latencyMs && <span>{latencyMs}ms</span>}
+            <span>{view._modelServed ?? "gemini-3.1-pro-preview"}</span>
+          </div>
+        </div>
       )}
 
-      {/* ── Summary advice ── */}
+      {/* ── Summary advice — prominent ── */}
       {view.advice && !view.advice.trimStart().startsWith("{") && (
-        <div className="card px-5 py-4">
-          <div className="flex items-center gap-2 mb-3">
-            <span className="text-lg">💡</span>
-            <h4 className="font-semibold text-slate-100">Why this plan works for your farm</h4>
+        <div className="rounded-2xl border border-white/[0.07] bg-white/[0.02] px-6 py-5">
+          <div className="flex items-center gap-2.5 mb-4">
+            <span className="text-xl">💡</span>
+            <h4 className="text-[15px] font-bold text-slate-100">Why this plan works for your farm</h4>
           </div>
-          <p className="text-[13.5px] text-slate-200 leading-7">{view.advice}</p>
+          <p className="text-[14px] text-slate-200 leading-8 pl-4 border-l-2 border-emerald-400/40">{view.advice}</p>
         </div>
       )}
 
       {/* ── Impact numbers ── */}
       {view.impact && (
-        <div className="card px-5 py-4">
-          <div className="flex items-center gap-2 mb-3">
-            <span className="text-lg">📊</span>
-            <h4 className="font-semibold text-slate-100">Projected impact</h4>
+        <div className="rounded-2xl border border-white/[0.07] bg-white/[0.02] px-6 py-5">
+          <div className="flex items-center gap-2.5 mb-4">
+            <span className="text-xl">📊</span>
+            <h4 className="text-[15px] font-bold text-slate-100">Projected impact</h4>
           </div>
           <ImpactDashboard impact={view.impact} />
         </div>
@@ -715,11 +723,11 @@ function ResultCard({
 
       {/* ── Task timeline ── */}
       {Array.isArray(view.tasks) && view.tasks.length > 0 && (
-        <div className="card px-5 py-4">
-          <div className="flex items-center gap-2 mb-4">
-            <span className="text-lg">📋</span>
-            <h4 className="font-semibold text-slate-100">Your action plan</h4>
-            <span className="ml-auto text-[11px] text-slate-500 bg-white/[0.04] border border-white/10 px-2 py-0.5 rounded-full">
+        <div className="rounded-2xl border border-white/[0.07] bg-white/[0.02] px-6 py-5">
+          <div className="flex items-center gap-2.5 mb-5">
+            <span className="text-xl">📋</span>
+            <h4 className="text-[15px] font-bold text-slate-100">Your action plan</h4>
+            <span className="ml-auto text-[11px] text-slate-500 bg-white/[0.04] border border-white/10 px-2.5 py-0.5 rounded-full">
               {view.tasks.length} steps
             </span>
           </div>
@@ -729,22 +737,22 @@ function ResultCard({
               const why    = typeof t === "string" ? "" : (t.why ?? "");
               const day    = typeof t === "string" ? null : (t.day ?? null);
               return (
-                <div key={i} className="flex gap-3">
+                <div key={i} className="flex gap-4">
                   <div className="shrink-0 flex flex-col items-center">
-                    <div className="h-7 w-7 rounded-full bg-emerald-400/15 border border-emerald-400/30 flex items-center justify-center text-[11px] font-bold text-emerald-300 mt-0.5">
+                    <div className="h-8 w-8 rounded-full bg-emerald-400/15 border border-emerald-400/30 flex items-center justify-center text-[11px] font-bold text-emerald-300 mt-0.5">
                       {day ?? (i + 1)}
                     </div>
                     {i < view.tasks!.length - 1 && (
-                      <div className="w-px flex-1 bg-emerald-400/[0.12] mt-1 min-h-[14px]" />
+                      <div className="w-px flex-1 bg-emerald-400/[0.12] mt-1 min-h-[18px]" />
                     )}
                   </div>
-                  <div className="pb-3 flex-1 min-w-0">
+                  <div className="pb-4 flex-1 min-w-0">
                     {day != null && (
-                      <div className="text-[10px] text-emerald-400/60 font-semibold uppercase tracking-widest mb-0.5">Day {day}</div>
+                      <div className="text-[10px] text-emerald-400/60 font-semibold uppercase tracking-widest mb-1">Day {day}</div>
                     )}
-                    <div className="text-[13.5px] font-medium text-slate-100 leading-snug">{action}</div>
+                    <div className="text-[14px] font-semibold text-slate-100 leading-snug">{action}</div>
                     {why && (
-                      <div className="mt-1.5 text-[12px] text-slate-400 leading-relaxed border-l-2 border-emerald-400/20 pl-3">{why}</div>
+                      <div className="mt-2 text-[12.5px] text-slate-400 leading-relaxed border-l-2 border-emerald-400/20 pl-3">{why}</div>
                     )}
                   </div>
                 </div>
@@ -756,14 +764,14 @@ function ResultCard({
 
       {/* ── Risks ── */}
       {Array.isArray(view.risks) && view.risks.length > 0 && (
-        <div className="card px-5 py-4">
-          <div className="flex items-center gap-2 mb-3">
-            <span className="text-lg">⚠️</span>
-            <h4 className="font-semibold text-slate-100">Risks to watch</h4>
+        <div className="rounded-2xl border border-white/[0.07] bg-white/[0.02] px-6 py-5">
+          <div className="flex items-center gap-2.5 mb-4">
+            <span className="text-xl">⚠️</span>
+            <h4 className="text-[15px] font-bold text-slate-100">Risks to watch</h4>
           </div>
-          <div className="grid sm:grid-cols-2 gap-2">
+          <div className="grid sm:grid-cols-2 gap-3">
             {view.risks.map((r, i) => (
-              <div key={i} className="flex gap-2.5 rounded-xl border border-amber-400/15 bg-amber-400/[0.04] px-3 py-2.5">
+              <div key={i} className="flex gap-3 rounded-xl border border-amber-400/15 bg-amber-400/[0.04] px-4 py-3">
                 <span className="text-amber-400 shrink-0 mt-0.5">⚡</span>
                 <p className="text-[13px] text-amber-100/90 leading-relaxed">{r}</p>
               </div>
@@ -774,13 +782,13 @@ function ResultCard({
 
       {/* ── Location basis (collapsed) ── */}
       {view._basis && (
-        <details className="card p-0 overflow-hidden">
-          <summary className="px-4 py-3 cursor-pointer text-[12px] font-medium text-slate-400 hover:text-slate-200 select-none flex items-center gap-2">
+        <details className="rounded-2xl border border-white/[0.07] overflow-hidden">
+          <summary className="px-5 py-3 cursor-pointer text-[12px] font-medium text-slate-400 hover:text-slate-200 select-none flex items-center gap-2 bg-white/[0.02]">
             <span>🗺️</span>
             <span>Why this crop was chosen · location &amp; field data</span>
-            <span className="ml-auto text-[10px] text-slate-600">expand</span>
+            <span className="ml-auto text-[10px] text-slate-600">expand ›</span>
           </summary>
-          <div className="border-t border-white/5 px-4 py-3">
+          <div className="border-t border-white/5 px-5 py-4">
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
               <BasisCell k="Season"      v={view._basis.season ?? "—"} />
               <BasisCell k="Soil"        v={`${view._basis.soil ?? "?"}${view._basis.soilSource === "farm-record" ? " (farm)" : " (geo)"}`} />
@@ -791,7 +799,7 @@ function ResultCard({
         </details>
       )}
 
-      {/* ── Arize observability (collapsed strip, expands on click) ── */}
+      {/* ── Arize — ultra-minimal footer strip (expandable for judges) ── */}
       <ArizePanel
         arize={view.arize}
         traceId={rec.traceId}
