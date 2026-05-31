@@ -68,7 +68,7 @@ public class GeminiClientReal implements GeminiClient {
         // Build model list: primary first, then fallbacks (Gemini 3 family)
         java.util.List<String> models = new java.util.ArrayList<>();
         String primary = (cfg.getModel() != null && !cfg.getModel().isBlank())
-                ? cfg.getModel().trim() : "gemini-3.1-pro-preview";
+                ? cfg.getModel().trim() : "gemini-2.5-flash";
         models.add(primary);
         if (cfg.getFallbackModels() != null) {
             cfg.getFallbackModels().stream()
