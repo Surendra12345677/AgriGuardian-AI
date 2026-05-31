@@ -192,5 +192,5 @@ $WebUrl = gcloud run services describe $WebService --region $Region --project $P
 Write-Host ""
 Write-Host "Deployed."
 Write-Host "    Dashboard (paste in Devpost): $WebUrl"
-Write-Host "    Backend Swagger UI          : $BackendUrl/swagger-ui.html"
+Write-Host "    Backend API base            : $BackendUrl/api/v1"
 Write-Host "    Backend health              : $BackendUrl/actuator/health"

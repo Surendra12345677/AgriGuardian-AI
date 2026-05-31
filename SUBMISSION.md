@@ -14,6 +14,27 @@
 
 ---
 
+## 0. Submission compliance snapshot
+
+| Requirement from official rules | Status | Where it is satisfied |
+|---|---|---|
+| Functional agent built with Google Cloud + Gemini | ✅ | Cloud Run-hosted web + backend, Gemini 3 config in [`agent-builder/agriguardian-agent.yaml`](./agent-builder/agriguardian-agent.yaml) |
+| Meaningful MCP integration with at least one participating partner | ✅ | **Arize MCP** (`search_traces`, `get_evaluations`, `log_feedback`, `list_datasets`) |
+| Multi-step system that plans and uses tools | ✅ | `planner.plan` → tools → Gemini → eval → feedback loop |
+| Runs on web / Android / iOS | ✅ | Hosted **web** app |
+| Public source repository with open-source license | ✅ | Public GitHub repo + MIT [`LICENSE`](./LICENSE) |
+| Hosted project URL included | ✅ | Hosted web and backend URLs above |
+| Demo video included | ⚠️ Manual step remaining | Replace placeholder with the final unlisted YouTube/Vimeo URL |
+| Submission in English | ✅ | All submission-facing docs are in English |
+
+## 0.1 Final manual items before clicking submit
+
+1. Replace the **Demo video** placeholder above with the final unlisted YouTube/Vimeo URL.
+2. Paste the same video URL into [`README.md`](./README.md) and [`DEVPOST_FORM.md`](./DEVPOST_FORM.md).
+3. After Devpost submission, add the final Devpost project URL to the repo About section and optionally the README.
+
+---
+
 ## 1. Track choice — and why we use a second MCP
 
 We are submitting to the **Arize** bucket.
@@ -148,6 +169,23 @@ In the UI:
 5. Scroll down → **Plant Doctor**, click the **wheat** sample, **Diagnose**.
 
 To see real Arize traces, set `ARIZE_ENABLED=true`, `ARIZE_API_KEY=...`, `ARIZE_SPACE_ID=...`, `MCP_ARIZE_ENABLED=true`, `MCP_ARIZE_URL=...` in `.env` and `docker compose up -d --build` again.
+
+---
+
+## 4.1 Cloud Shell redeploy (maintainer runbook)
+
+Use this if you need to redeploy the hosted web app + backend from Google Cloud Shell instead of local PowerShell.
+
+```bash
+git clone https://github.com/Surendra12345677/AgriGuardian-AI.git
+cd AgriGuardian-AI
+cp .env.example .env
+# fill .env with MONGODB_URI, GEMINI_API_KEY, ARIZE_API_KEY, ARIZE_SPACE_ID
+chmod +x agent-builder/deploy.sh
+./agent-builder/deploy.sh
+```
+
+Detailed step-by-step instructions live in [`docs/CLOUD_SHELL_REDEPLOY.md`](./docs/CLOUD_SHELL_REDEPLOY.md).
 
 ---
 

@@ -180,7 +180,7 @@ WEB_URL="$(gcloud run services describe "$WEB_SERVICE" --region "$REGION" --proj
 echo
 echo "✅ Deployed."
 echo "    Dashboard (paste this in Devpost): $WEB_URL"
-echo "    Backend Swagger UI               : $BACKEND_URL/swagger-ui.html"
+echo "    Backend API base                : $BACKEND_URL/api/v1"
 echo "    Backend health                   : $BACKEND_URL/actuator/health"
 echo
 echo "Done."

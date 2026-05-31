@@ -2,8 +2,8 @@
 
 > Open https://googlecloud-rapidagent.devpost.com → **Submit project** →
 > paste each field below into the matching Devpost input.
-> Every field is pre-filled. The only blanks are the 3 things only you
-> can provide (video URL, hosted URL, your contact handles).
+> Every field is pre-filled. The only blanks you still need to finalize are
+> the demo video URL and, after submission, the public Devpost project URL.
 
 ---
 
@@ -13,12 +13,14 @@ You need these 3 things ready (everything else is done in this repo):
 
 | # | What | Where you get it |
 |---|------|------------------|
-| 1 | **Hosted project URL** | Deploy to **Google Cloud Run** via `agent-builder/deploy.ps1` (already wired). Per hackathon rules §7.B.2, the hosted demo must run on Google Cloud — do not substitute competing cloud/host providers. |
+| 1 | **Hosted project URL** | ✅ Already deployed on **Google Cloud Run**. If you need to redeploy, use [`docs/CLOUD_SHELL_REDEPLOY.md`](./docs/CLOUD_SHELL_REDEPLOY.md) or `agent-builder/deploy.ps1`. |
 | 2 | **Demo video URL** | Record the shot list in `SUBMISSION.md` §3, upload to YouTube as **Unlisted**, paste the share link. |
 | 3 | **Open-source repo URL** | ✅ already public: `https://github.com/Surendra12345677/AgriGuardian-AI` (MIT, detected by GitHub). |
 
-Tell me when you have (1) and (2) and I'll wire them into `SUBMISSION.md`
-+ `README.md` + the GitHub release notes for you.
+Before you submit, replace every remaining placeholder video URL in:
+- [`README.md`](./README.md)
+- [`SUBMISSION.md`](./SUBMISSION.md)
+- this file
 
 ---
 
@@ -61,6 +63,7 @@ google-cloud-agent-builder, gemini-3, arize, arize-mcp, mongodb, mongodb-mcp, sp
 | Video demo | `<paste your YouTube unlisted URL here>` |
 | Documentation | `https://github.com/Surendra12345677/AgriGuardian-AI/blob/main/SUBMISSION.md` |
 | Backend health (optional) | `https://agriguardian-ai-zqafbkccaa-uc.a.run.app/actuator/health` |
+| Cloud Shell redeploy guide (optional) | `https://github.com/Surendra12345677/AgriGuardian-AI/blob/main/docs/CLOUD_SHELL_REDEPLOY.md` |
 
 ## 7. Test instructions (paste into "How to run / test")
 ```
@@ -119,8 +122,8 @@ one-line summary you can also drop in your Devpost "Additional notes":
 
 ## 11. After submission — what to share
 
-When you've clicked **Submit** on Devpost, share with me:
-- The Devpost project URL — I'll add it to README + repo About.
-- The video URL — I'll embed it in README and SUBMISSION.md.
-- The hosted demo URL — I'll wire it into the Hero CTA + README badges.
+After you click **Submit** on Devpost, do these cleanup steps:
+- Add the public Devpost project URL to the repo **About** section.
+- Replace any remaining placeholder video URLs in the docs.
+- Optionally add the Devpost link to `README.md`.
 

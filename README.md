@@ -15,11 +15,11 @@
 **Partner track:** 🟣 **Arize** (Arize MCP + Arize AX traces)
 **Languages:** 13 — English, Hindi, Marathi, Tamil, Telugu, Bengali, Punjabi · Spanish, French, German, Italian, Portuguese, Dutch
 **Status:** ✅ Live on Google Cloud Run
-**Submission:** [`SUBMISSION.md`](./SUBMISSION.md) · [`DEVPOST_FORM.md`](./DEVPOST_FORM.md)
+**Submission:** [`SUBMISSION.md`](./SUBMISSION.md) · [`DEVPOST_FORM.md`](./DEVPOST_FORM.md) · [`docs/CLOUD_SHELL_REDEPLOY.md`](./docs/CLOUD_SHELL_REDEPLOY.md)
 **🌐 Live demo:** **https://agriguardian-web-963977203522.us-central1.run.app**
 **🔌 Backend API base:** https://agriguardian-ai-zqafbkccaa-uc.a.run.app/api/v1
 **❤️ Backend health:** https://agriguardian-ai-zqafbkccaa-uc.a.run.app/actuator/health
-**Demo video:** _coming soon_
+**Demo video:** _add your unlisted YouTube/Vimeo URL here before final Devpost submission_
 
 ---
 
@@ -58,7 +58,7 @@ AgriGuardian AI is a **personal AI farming manager** that:
 
 ```mermaid
 flowchart LR
-    U[Farmer · UI / curl / Swagger] -->|REST| API[Spring Boot REST API]
+    U[Farmer · UI / curl / dashboard] -->|REST| API[Spring Boot REST API]
     U -->|chat| AB[Google Cloud<br/>Agent Builder]
     AB -->|HTTP tools| API
     AB -->|MCP| ARIZE_MCP[(Arize MCP<br/><b>partner track</b>)]
@@ -81,8 +81,9 @@ flowchart LR
 ```
 
 Spans emitted per request: `agent.run` → `planner.plan` → `tool.<name>` →
-`gemini.generate` → `reflector.reflect`. See
-[`docs/HACKATHON_PLAN.md`](./docs/HACKATHON_PLAN.md) §3 for Arize wiring details.
+`gemini.generate` → `reflector.reflect`. For the partner-track wiring and
+evaluation loop, see [`docs/ARIZE_INTEGRATION.md`](./docs/ARIZE_INTEGRATION.md)
+and [`docs/EVAL_REPORT.md`](./docs/EVAL_REPORT.md).
 
 ## 🛠️ Tech Stack
 
@@ -98,6 +99,31 @@ Spans emitted per request: `agent.run` → `planner.plan` → `tool.<name>` →
 | Secondary action tool | **MongoDB MCP** — agent persists farm plans under user approval |
 | Resilience | Resilience4j (Circuit Breaker + Retry) + Caffeine cache |
 | External APIs | Open-Meteo (weather), mock Market Price API |
+
+## ✅ Hackathon requirements coverage
+
+| Requirement | Status | Evidence |
+|---|---|---|
+| Functional agent, not a chatbot | ✅ | Multi-step plan → tool-use → reflect loop in [`AgentOrchestrator`](./src/main/java/com/Hackathon/AgriGuardian/AI/agent/AgentOrchestrator.java) |
+| Built with Google Cloud + Gemini | ✅ | Google Cloud Run deployment + Gemini 3 model config in [`agent-builder/agriguardian-agent.yaml`](./agent-builder/agriguardian-agent.yaml) |
+| Meaningful partner MCP integration | ✅ | **Arize MCP** is the partner-track qualifier; see [`docs/ARIZE_INTEGRATION.md`](./docs/ARIZE_INTEGRATION.md) |
+| Multi-step mission with action-taking | ✅ | Weather / soil / market grounding + MongoDB persistence under approval |
+| Runs on a supported platform | ✅ | Hosted **web** app at the Cloud Run URL above |
+| Public open-source repository with license | ✅ | MIT license in [`LICENSE`](./LICENSE), auto-detected by GitHub |
+| Hosted project URL for judging | ✅ | Live web URL and backend health URL above |
+| Demo video URL | ⚠️ Pending manual paste | Record per [`docs/VIDEO_SCRIPT.md`](./docs/VIDEO_SCRIPT.md) and paste the final URL into this README + `SUBMISSION.md` + `DEVPOST_FORM.md` |
+| Devpost project URL | ⚠️ Pending after submission | Add the final Devpost link to the repo About section and README once submitted |
+
+## 📦 Submission readiness checklist
+
+- [x] Public GitHub repository
+- [x] Open-source license visible in repo
+- [x] Hosted web deployment on Google Cloud Run
+- [x] Arize MCP partner-track integration documented
+- [x] Local run instructions for judges
+- [x] Cloud Shell redeploy guide added
+- [ ] Upload final 3-minute demo video and replace placeholders
+- [ ] Paste final Devpost project URL after submission
 
 ## 🟣 Why this submission wins the Arize bucket
 
@@ -198,6 +224,22 @@ Invoke-RestMethod -Uri http://localhost:8080/api/v1/tools/weather `
 
 > Stub mode means judges can evaluate the agent flow **without any API key**.
 
+## ☁️ Cloud Shell redeploy
+
+If you need to redeploy the hosted backend + web app from Google Cloud Shell,
+follow [`docs/CLOUD_SHELL_REDEPLOY.md`](./docs/CLOUD_SHELL_REDEPLOY.md).
+
+Short version:
+
+```bash
+git clone https://github.com/Surendra12345677/AgriGuardian-AI.git
+cd AgriGuardian-AI
+cp .env.example .env
+# fill .env with MONGODB_URI, GEMINI_API_KEY, ARIZE_API_KEY, ARIZE_SPACE_ID
+chmod +x agent-builder/deploy.sh
+./agent-builder/deploy.sh
+```
+
 ## 🔑 Environment variables
 
 Sourced from [`.env.example`](./.env.example).
@@ -235,9 +277,9 @@ src/main/java/com/Hackathon/AgriGuardian/AI/
   observability/   OTel → Arize AX, MDC filter, secret-redacting logs   (done)
   bootstrap/       DemoSeedRunner (1 farm + 3 historical recs)          (done)
 
-agent-builder/      Vertex AI Agent Builder spec + deploy.ps1           (done)
+agent-builder/      Vertex AI Agent Builder spec + deploy scripts       (done)
 web/                Next.js 15 + React 19 demo dashboard                 (done)
-docs/               HACKATHON_PLAN.md (start here)                      (done)
+docs/               submission / Arize / redeploy guides                (done)
 .github/            CI, CodeQL, Dependabot, Gitleaks, templates         (done)
 ```
 
@@ -286,10 +328,10 @@ docs/               HACKATHON_PLAN.md (start here)                      (done)
 - [x] Demo seed (1 farm + 3 historical recommendations on first boot, dev profile)
 - [x] Secret-redacting Logback converter (defence-in-depth for log lines)
 - [x] Unit + MockMvc tests
-- [x] Swagger / OpenAPI UI removed (incompatible with Spring Boot 4 / Spring 7 — REST endpoints documented in [`docs/HACKATHON_PLAN.md`](./docs/HACKATHON_PLAN.md) and tested in `src/test/`)
+- [x] REST endpoints documented in [`SUBMISSION.md`](./SUBMISSION.md) and tested in `src/test/`
 - [x] Dockerfile + docker-compose (app + mongo + mongodb-mcp + web)
 - [x] **Next.js 15 dashboard** (onboarding form + farm list + agent panel)
-- [ ] Cloud Run deployment (blocked on GCP billing)
+- [x] Cloud Run deployment (backend + web)
 - [ ] 3-min demo video
 
 ## 🤝 Contributing

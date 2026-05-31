@@ -13,7 +13,7 @@
 #       --location us-central1 \
 #       --spec-file agent-builder/agriguardian-agent.yaml
 #
-# Architecture (see docs/HACKATHON_PLAN.md):
+# Architecture (see docs/ARIZE_INTEGRATION.md and SUBMISSION.md):
 #   Farmer → Agent Builder (Gemini 3 brain + tools below)
 #                 ├─ HTTP tools  → Spring Boot app (this repo, deployed to Cloud Run)
 #                 ├─ MCP tool    → Arize MCP server      (PARTNER TRACK — primary)
