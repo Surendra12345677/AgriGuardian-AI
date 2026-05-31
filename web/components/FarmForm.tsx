@@ -10,16 +10,16 @@ const WATER = ["LOW", "MEDIUM", "HIGH"] as const;
 const SOIL  = ["LOAM", "CLAY", "SANDY", "BLACK", "RED"] as const;
 
 const WATER_LABELS: Record<typeof WATER[number], string> = {
-  LOW: "Low",
-  MEDIUM: "Medium",
-  HIGH: "High",
+  LOW: "Low — rain-fed only",
+  MEDIUM: "Medium — seasonal irrigation",
+  HIGH: "High — full irrigation",
 };
 const SOIL_LABELS: Record<typeof SOIL[number], string> = {
-  LOAM:  "Loam",
-  CLAY:  "Clay",
-  SANDY: "Sandy",
-  BLACK: "Black Cotton",
-  RED:   "Red Laterite",
+  LOAM:  "Loam — balanced",
+  CLAY:  "Clay — heavy, wet",
+  SANDY: "Sandy — dry, fast drain",
+  BLACK: "Black Cotton — rich, expansive",
+  RED:   "Red Laterite — acidic, light",
 };
 
 export default function FarmForm({
@@ -27,9 +27,6 @@ export default function FarmForm({
   selected,
 }: {
   onCreated: (f: Farm) => void;
-  /** When the user picks an existing farm in the right-hand list, the
-   *  form's location + profile fields jump to that farm so the map below
-   *  always matches what's selected. */
   selected?: Farm;
 }) {
   const [busy, setBusy]   = useState(false);
@@ -37,33 +34,28 @@ export default function FarmForm({
   const [okMsg, setOk]    = useState<string | null>(null);
 
   const [form, setForm] = useState({
-    farmerName: "",
-    contact: "",
-    latitude: 18.52,
-    longitude: 73.85,
-    landSizeAcres: 2,
+    farmerName:        "",
+    contact:           "",
+    latitude:          18.52,
+    longitude:         73.85,
+    landSizeAcres:     2,
     waterAvailability: "MEDIUM",
-    soilType: "BLACK",
-    budgetInr: 50000,
+    soilType:          "BLACK",
+    budgetInr:         50000,
   });
 
-  // Sync the LocationPicker (and field profile) to the currently-selected
-  // farm so what's on the map matches what's in the right-hand sidebar.
-  // We deliberately leave farmerName/contact empty so the user knows this
-  // form is for ADDING A NEW farm — the location just starts from the
-  // selected farm as a sensible reference point.
   useEffect(() => {
     if (!selected) return;
     setForm(prev => ({
       ...prev,
-      latitude: selected.latitude,
-      longitude: selected.longitude,
-      landSizeAcres: selected.landSizeAcres,
+      latitude:          selected.latitude,
+      longitude:         selected.longitude,
+      landSizeAcres:     selected.landSizeAcres,
       waterAvailability: selected.waterAvailability,
-      soilType: selected.soilType,
-      budgetInr: selected.budgetInr,
+      soilType:          selected.soilType,
+      budgetInr:         selected.budgetInr,
     }));
-  }, [selected?.id]); // re-run only when the chosen farm changes
+  }, [selected?.id]);
 
   function set<K extends keyof typeof form>(k: K, v: (typeof form)[K]) {
     setForm(prev => ({ ...prev, [k]: v }));
@@ -72,120 +64,156 @@ export default function FarmForm({
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!form.farmerName.trim()) {
-      setError("Farmer name is required.");
+      setError("Please enter the farmer name.");
       return;
     }
     setBusy(true); setError(null); setOk(null);
     try {
       const created = await api.createFarm(form);
       onCreated(created);
-      setOk(`Farm “${created.farmerName}” saved. Scroll down to plan the season.`);
+      setOk(`✓ Farm "${created.farmerName}" saved — continue to Plan →`);
       set("farmerName", "");
       set("contact", "");
     } catch (err: any) {
-      setError(err.message);
+      setError(err.message ?? "Save failed — is the backend running?");
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <form onSubmit={submit} className="space-y-5">
-      {/* ── CARD 1 · Farmer + field profile ─────────────────────────────── */}
-      <div className="card p-5 lg:p-6 space-y-5">
-        <div className="flex items-start justify-between gap-3 flex-wrap">
+    <form onSubmit={submit}>
+      <div className="card overflow-hidden">
+        {/* ── Header ── */}
+        <div className="px-5 py-4 border-b border-white/5 flex items-center justify-between gap-3 flex-wrap">
           <div>
-            <div className="text-[10px] uppercase tracking-[0.18em] text-emerald-300/80 font-semibold">
-              Part A
-            </div>
-            <h3 className="font-semibold text-slate-100 text-lg flex items-center gap-2 mt-1">
-              <span aria-hidden>👤</span> Farmer & field profile
+            <h3 className="font-semibold text-slate-100 text-lg flex items-center gap-2">
+              <span>🌾</span> Add a new farm
             </h3>
-            <p className="text-xs text-slate-400 mt-0.5 max-w-md">
-              Identity, plot size, soil, water and budget. The agent uses these to choose
-              a crop and size the impact numbers.
+            <p className="text-xs text-slate-400 mt-0.5">
+              Fill in the details on the left, then pin your field on the map.
             </p>
           </div>
+          {selected && (
+            <div className="text-[11px] text-slate-500 font-mono">
+              Ref: {selected.farmerName}
+            </div>
+          )}
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <Field label="Farmer name" required>
-            <input className="input" value={form.farmerName}
-                   placeholder="Your full name"
-                   onChange={e => set("farmerName", e.target.value)} />
-          </Field>
-          <Field label="Contact (optional)">
-            <input className="input" value={form.contact}
-                   placeholder="+91-…"
-                   onChange={e => set("contact", e.target.value)} />
-          </Field>
-        </div>
+        {/* ── Two-column body: fields (left) + map (right) ── */}
+        <div className="grid lg:grid-cols-2 divide-y lg:divide-y-0 lg:divide-x divide-white/5">
 
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <Field label="Land (acres)">
-            <NumericField value={form.landSizeAcres} min={0.1} step={0.1}
-                          onChange={n => set("landSizeAcres", n)} />
-          </Field>
-          <Field label="Budget (INR)">
-            <NumericField value={form.budgetInr} min={0} step={500}
-                          onChange={n => set("budgetInr", n)} />
-          </Field>
-          <Field label="Water availability">
-            <Select value={form.waterAvailability as (typeof WATER)[number]}
+          {/* LEFT: all form fields */}
+          <div className="p-5 space-y-4">
+            {/* Farmer identity */}
+            <div className="space-y-3">
+              <div className="text-[10px] uppercase tracking-widest text-emerald-300/70 font-semibold">
+                Farmer identity
+              </div>
+              <div className="grid sm:grid-cols-2 gap-3">
+                <Field label="Full name" required>
+                  <input
+                    className="input"
+                    placeholder="e.g. Ramesh Kumar"
+                    value={form.farmerName}
+                    onChange={e => set("farmerName", e.target.value)}
+                  />
+                </Field>
+                <Field label="Phone (optional)">
+                  <input
+                    className="input"
+                    placeholder="+91-9876543210"
+                    value={form.contact}
+                    onChange={e => set("contact", e.target.value)}
+                  />
+                </Field>
+              </div>
+            </div>
+
+            {/* Field characteristics */}
+            <div className="space-y-3">
+              <div className="text-[10px] uppercase tracking-widest text-emerald-300/70 font-semibold">
+                Field details
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Land size (acres)">
+                  <NumericField
+                    value={form.landSizeAcres} min={0.1} step={0.5}
+                    onChange={n => set("landSizeAcres", n)}
+                  />
+                </Field>
+                <Field label="Budget (₹ INR)">
+                  <NumericField
+                    value={form.budgetInr} min={0} step={500}
+                    onChange={n => set("budgetInr", n)}
+                  />
+                </Field>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <Field label="Water availability">
+                  <Select
+                    value={form.waterAvailability as typeof WATER[number]}
                     options={WATER}
                     displayMap={WATER_LABELS}
-                    onChange={v => set("waterAvailability", v)} />
-          </Field>
-          <Field label="Soil type">
-            <Select value={form.soilType as (typeof SOIL)[number]}
+                    onChange={v => set("waterAvailability", v)}
+                  />
+                </Field>
+                <Field label="Soil type">
+                  <Select
+                    value={form.soilType as typeof SOIL[number]}
                     options={SOIL}
                     displayMap={SOIL_LABELS}
-                    onChange={v => set("soilType", v)} />
-          </Field>
-        </div>
-      </div>
-
-      {/* ── CARD 2 · Location (separate card so it's not confused with the profile) ── */}
-      <div className="card p-5 lg:p-6 space-y-3">
-        <div className="flex items-start justify-between gap-3 flex-wrap">
-          <div>
-            <div className="text-[10px] uppercase tracking-[0.18em] text-emerald-300/80 font-semibold">
-              Part B
+                    onChange={v => set("soilType", v)}
+                  />
+                </Field>
+              </div>
             </div>
-            <h3 className="font-semibold text-slate-100 text-lg flex items-center gap-2 mt-1">
-              <span aria-hidden>📍</span> Field location
-            </h3>
-            <p className="text-xs text-slate-400 mt-0.5 max-w-md">
-              {selected
-                ? <>The map is showing <span className="text-emerald-300 font-medium">{selected.farmerName}</span>&apos;s field. Drag the pin to set a different point for a NEW farm, or just leave it and change the name above to clone.</>
-                : <>Pick the exact GPS point of this field. Weather, soil and price tools all key off these coordinates — changing them changes the recommendation.</>
-              }
+
+            {/* Coordinates readout */}
+            <div className="rounded-lg border border-white/5 bg-white/[0.02] px-3 py-2 flex items-center justify-between">
+              <span className="text-xs text-slate-500">📍 Selected coordinates</span>
+              <span className="font-mono text-xs text-emerald-300">
+                {form.latitude.toFixed(5)}, {form.longitude.toFixed(5)}
+              </span>
+            </div>
+
+            {/* Submit */}
+            <div className="pt-1 flex items-center gap-3 flex-wrap">
+              {error && (
+                <p className="text-sm text-red-300 flex-1">{error}</p>
+              )}
+              {okMsg && (
+                <p className="text-sm text-emerald-300 flex-1">{okMsg}</p>
+              )}
+              <button
+                disabled={busy}
+                className="btn-primary ml-auto"
+              >
+                {busy ? (
+                  <span className="flex items-center gap-2">
+                    <Spinner /> Saving…
+                  </span>
+                ) : "Save farm & continue →"}
+              </button>
+            </div>
+          </div>
+
+          {/* RIGHT: map */}
+          <div className="p-5 flex flex-col gap-3">
+            <div className="text-[10px] uppercase tracking-widest text-emerald-300/70 font-semibold">
+              Field location
+            </div>
+            <p className="text-xs text-slate-400 leading-relaxed">
+              Search for your village, use GPS, or click the map to drop the pin.
+              The AI uses these exact coordinates for weather, soil and market data.
             </p>
+            <LocationPicker
+              value={{ lat: form.latitude, lon: form.longitude }}
+              onChange={p => { set("latitude", p.lat); set("longitude", p.lon); }}
+              height="h-72"
+            />
           </div>
-          <div className="text-right">
-            <div className="text-[10px] uppercase tracking-wider text-slate-500">Current point</div>
-            <div className="font-mono text-xs text-slate-200">
-              {form.latitude.toFixed(4)}, {form.longitude.toFixed(4)}
-            </div>
-          </div>
-        </div>
-        <LocationPicker
-          value={{ lat: form.latitude, lon: form.longitude }}
-          onChange={p => { set("latitude", p.lat); set("longitude", p.lon); }}
-        />
-      </div>
-
-      {/* ── Submit row ──────────────────────────────────────────────────── */}
-      <div className="card p-4 flex items-center gap-3 flex-wrap">
-        <div className="text-xs text-slate-400">
-          Saving creates a farm record the planner, what-if and plant-doctor steps will use.
-        </div>
-        <div className="ml-auto flex items-center gap-3">
-          {error && <p className="text-sm text-red-300">{error}</p>}
-          {okMsg && <p className="text-sm text-emerald-300">{okMsg}</p>}
-          <button disabled={busy} className="btn-primary">
-            {busy ? "Saving…" : "Save farm & continue"}
-          </button>
         </div>
       </div>
     </form>
@@ -196,8 +224,19 @@ function Field({ label, required, children }:
   { label: string; required?: boolean; children: React.ReactNode }) {
   return (
     <label className="space-y-1 block">
-      <span className="label">{label}{required && <span className="text-red-400"> *</span>}</span>
+      <span className="label">
+        {label}{required && <span className="text-red-400"> *</span>}
+      </span>
       {children}
     </label>
+  );
+}
+
+function Spinner() {
+  return (
+    <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeOpacity="0.25" strokeWidth="3" />
+      <path d="M22 12a10 10 0 0 1-10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+    </svg>
   );
 }
