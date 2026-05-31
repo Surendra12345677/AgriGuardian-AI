@@ -20,14 +20,14 @@ const SAMPLES = [
 ];
 
 export default function PlantDoctor({ language }: { language: Lang }) {
-  const [crop, setCrop] = useState("wheat");
+  const [crop, setCrop] = useState("");
   const [symptoms, setSymptoms] = useState("");
   const [busy, setBusy] = useState(false);
   const [diag, setDiag] = useState<Diag | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   async function go() {
-    if (!symptoms.trim()) return;
+    if (!symptoms.trim() || !crop.trim()) return;
     setBusy(true); setError(null); setDiag(null);
     try {
       const out = await api.diagnose({ crop, symptoms, language });
@@ -94,7 +94,7 @@ export default function PlantDoctor({ language }: { language: Lang }) {
                     value={symptoms}
                     onChange={e => setSymptoms(e.target.value)} />
           <div className="flex justify-end">
-            <button onClick={go} disabled={busy || !symptoms.trim()} className="btn-primary">
+            <button onClick={go} disabled={busy || !symptoms.trim() || !crop.trim()} className="btn-primary">
               {busy ? "Diagnosing…" : "🩺 Diagnose"}
             </button>
           </div>
