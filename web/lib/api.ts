@@ -124,6 +124,10 @@ async function http<T>(path: string, init?: RequestInit, timeoutMs = 20_000): Pr
     } catch { /* not JSON — keep raw body */ }
     throw new Error(detail);
   }
+  // 204 No Content (DELETE) — no body to parse
+  if (res.status === 204 || res.headers.get("content-length") === "0") {
+    return undefined as T;
+  }
   return (await res.json()) as T;
 }
 

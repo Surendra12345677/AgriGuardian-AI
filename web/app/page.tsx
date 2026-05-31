@@ -207,13 +207,12 @@ export default function HomePage() {
         >
           {selected ? (
             <div className="space-y-4">
-              {/* Main two-column layout: agent on left, Arize live on right */}
-              <div className="grid lg:grid-cols-5 gap-4 items-start">
-                <div className="lg:col-span-3">
+              {/* Main layout: agent/result gets bulk of space, Arize sidebar is narrow */}
+              <div className="grid xl:grid-cols-[1fr_300px] lg:grid-cols-[1fr_280px] gap-5 items-start">
+                <div>
                   <AgentPanel farm={selected} language={lang} onLanguageChange={setLang} />
                 </div>
-                <div className="lg:col-span-2 space-y-4">
-                  {/* Arize live quality — always visible, not buried in result */}
+                <div className="space-y-4 sticky top-20">
                   <EvalQualityCard />
                 </div>
               </div>

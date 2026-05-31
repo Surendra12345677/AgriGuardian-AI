@@ -412,146 +412,151 @@ function ArizePanel({ arize, traceId, modelServed, evalScore, evalDetails, evalJ
       </summary>
 
       {/* ── Expanded detail view ── */}
-      <div className="mt-2 rounded-xl border border-white/[0.07] bg-white/[0.02] p-4 space-y-4">
+      <div className="mt-2 rounded-xl border border-white/[0.07] bg-white/[0.02] overflow-hidden">
 
-        {/* Header with badges + open-in-Arize link */}
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-[12px] font-semibold text-slate-300">Arize AX · Observability &amp; Evaluation</span>
+        {/* Top bar with badges + open link */}
+        <div className="flex items-center gap-2 flex-wrap px-4 py-3 border-b border-white/[0.05]">
+          <span className="text-[12px] font-semibold text-slate-200">Arize AX · Observability &amp; Evaluation</span>
           {arizeStatus != null ? (
             isConnected
-              ? <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-400/15 text-emerald-300 font-semibold uppercase tracking-wider animate-pulse">live · connected</span>
-              : <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-400/15 text-slate-400 font-semibold uppercase tracking-wider">exporter disabled</span>
+              ? <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-400/15 text-emerald-300 font-semibold uppercase tracking-wider animate-pulse">live</span>
+              : <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-400/15 text-slate-400 font-semibold uppercase tracking-wider">exporter off</span>
           ) : (
             <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-400/15 text-emerald-300 font-semibold uppercase tracking-wider animate-pulse">live</span>
           )}
           <span className="text-[10px] px-1.5 py-0.5 rounded bg-violet-400/15 text-violet-300 font-semibold uppercase tracking-wider">MCP</span>
           <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-400/15 text-blue-300 font-semibold uppercase tracking-wider">OTLP</span>
           <a href={arizeUrl} target="_blank" rel="noreferrer"
-             className="ml-auto text-[11px] px-2.5 py-1 rounded-lg border border-violet-400/40 text-violet-200 hover:bg-violet-400/10 flex items-center gap-1">
-            View in Arize →
+             className="ml-auto text-[11px] px-2.5 py-1 rounded-lg border border-violet-400/40 text-violet-200 hover:bg-violet-400/10 flex items-center gap-1 shrink-0">
+            Open Arize →
           </a>
         </div>
 
-        {/* Visual agent flow */}
-        <div className="flex items-center gap-1 overflow-x-auto pb-1">
-          {FLOW.map((f, i) => (
-            <div key={i} className="flex items-center gap-1 flex-shrink-0">
-              <div className="rounded-lg border border-white/10 bg-white/[0.03] px-2.5 py-1.5 text-center min-w-[80px]">
-                <div className="text-base">{f.icon}</div>
-                <div className="text-[11px] text-slate-200 font-medium leading-tight">{f.label}</div>
-                <div className="text-[10px] text-slate-500 leading-tight">{f.desc}</div>
-              </div>
-              {i < FLOW.length - 1 && <span className="text-slate-600 text-xs flex-shrink-0">→</span>}
-            </div>
-          ))}
-        </div>
+        <div className="p-4 space-y-4">
 
-        {/* LLM-judge eval scorecard */}
-        {evalPending && !evalDetails && (
-          <div className="rounded-lg border border-violet-400/20 bg-violet-400/[0.04] px-3 py-2.5 flex items-center gap-2.5">
-            <span className="h-2 w-2 rounded-full bg-violet-400 animate-pulse flex-shrink-0" />
-            <div>
-              <span className="text-[11px] font-semibold text-violet-300">Arize LLM Judge evaluating…</span>
-              <p className="text-[10px] text-slate-400 mt-0.5">Gemini is scoring this plan on 4 quality dimensions. Results appear in ~10–15 s.</p>
+          {/* ① How the data flows — visual pipeline */}
+          <div>
+            <div className="text-[10px] uppercase tracking-[0.15em] text-slate-500 font-semibold mb-2">① How this plan was monitored</div>
+            <div className="flex items-center gap-1 overflow-x-auto pb-1">
+              {FLOW.map((f, i) => (
+                <div key={i} className="flex items-center gap-1 flex-shrink-0">
+                  <div className="rounded-lg border border-white/10 bg-white/[0.04] px-2.5 py-1.5 text-center min-w-[76px]">
+                    <div className="text-base">{f.icon}</div>
+                    <div className="text-[10px] text-slate-200 font-medium leading-tight">{f.label}</div>
+                    <div className="text-[9px] text-slate-500 leading-tight">{f.desc}</div>
+                  </div>
+                  {i < FLOW.length - 1 && <span className="text-slate-600 text-[10px] flex-shrink-0">→</span>}
+                </div>
+              ))}
             </div>
           </div>
-        )}
-        {evalDetails && (
-          <div className="rounded-lg border border-violet-400/20 bg-violet-400/[0.04] p-3">
-            <div className="flex items-center gap-2 mb-2 flex-wrap">
-              <span className="text-[11px] font-semibold text-violet-300">⚖️ LLM-as-Judge Eval</span>
-              {evalJudge && <span className="text-[10px] px-1.5 py-0.5 rounded bg-violet-400/20 text-violet-200">{evalJudge}</span>}
-              {evalScore != null && (
-                <span className={`ml-auto text-[11px] font-bold px-2 py-0.5 rounded ${
-                  evalScore >= 0.75 ? "text-emerald-300 bg-emerald-400/10" : evalScore >= 0.6 ? "text-cyan-300 bg-cyan-400/10" : "text-amber-300 bg-amber-400/10"
-                }`}>
-                  {evalScore >= 0.75 ? "✓ pass" : "⚠ review"} · {evalScore.toFixed(3)}
-                </span>
+
+          {/* ② LLM-judge eval scorecard */}
+          <div>
+            <div className="text-[10px] uppercase tracking-[0.15em] text-slate-500 font-semibold mb-2">② AI quality score for this plan</div>
+            {evalPending && !evalDetails ? (
+              <div className="rounded-lg border border-violet-400/20 bg-violet-400/[0.04] px-3 py-2.5 flex items-center gap-2.5">
+                <span className="h-2 w-2 rounded-full bg-violet-400 animate-pulse flex-shrink-0" />
+                <div>
+                  <span className="text-[11px] font-semibold text-violet-300">LLM judge scoring…</span>
+                  <p className="text-[10px] text-slate-400 mt-0.5">Gemini checks this plan on 4 dimensions. ~10–15 s.</p>
+                </div>
+              </div>
+            ) : evalDetails ? (
+              <div className="rounded-lg border border-violet-400/20 bg-violet-400/[0.04] p-3">
+                <div className="flex items-center gap-2 mb-3 flex-wrap">
+                  <span className="text-[11px] font-semibold text-violet-300">⚖️ Gemini-as-Judge</span>
+                  {evalJudge && <span className="text-[10px] px-1.5 py-0.5 rounded bg-violet-400/20 text-violet-200 font-mono">{evalJudge}</span>}
+                  {evalScore != null && (
+                    <span className={`ml-auto text-[11px] font-bold px-2.5 py-0.5 rounded-full ${
+                      evalScore >= 0.75 ? "text-emerald-300 bg-emerald-400/15 border border-emerald-400/20"
+                        : evalScore >= 0.6 ? "text-cyan-300 bg-cyan-400/10 border border-cyan-400/20"
+                        : "text-amber-300 bg-amber-400/10 border border-amber-400/20"
+                    }`}>
+                      {evalScore >= 0.75 ? "✓ pass" : "⚠ needs review"} · {Math.round(evalScore * 100)}%
+                    </span>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+                  {([
+                    ["relevance",            "Plan relevance",    "Is the plan specific to this farm's soil, location, season?"],
+                    ["groundedness",         "Numbers grounded",  "Are income/yield estimates backed by real tool data?"],
+                    ["agronomicCorrectness", "Crop accuracy",     "Is the recommended crop correct for this season + soil?"],
+                    ["hallucinationRisk",    "No hallucination",  "Did the AI fabricate anything? (1.0 = nothing made up)"],
+                  ] as [keyof NonNullable<Parsed["evalDetails"]>, string, string][]).map(([k, label, meaning]) => {
+                    const v = evalDetails[k] as number | undefined;
+                    if (v == null) return null;
+                    const p   = Math.round(v * 100);
+                    const bar = v >= 0.8 ? "bg-emerald-400" : v >= 0.6 ? "bg-cyan-400" : "bg-amber-400";
+                    const txt = v >= 0.8 ? "text-emerald-300" : v >= 0.6 ? "text-cyan-300" : "text-amber-300";
+                    const ico = v >= 0.8 ? "✅" : v >= 0.6 ? "🟡" : "⚠️";
+                    return (
+                      <div key={k}>
+                        <div className="flex items-center justify-between text-[10px] mb-0.5">
+                          <span className="text-slate-400 flex items-center gap-1" title={meaning}><span>{ico}</span>{label}</span>
+                          <span className={`font-bold ${txt}`}>{p}%</span>
+                        </div>
+                        <div className="h-1 w-full rounded-full bg-white/[0.05] overflow-hidden">
+                          <div className={`h-full rounded-full ${bar}`} style={{ width: `${p}%` }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : (
+              <p className="text-[11px] text-slate-500 italic">Score will appear after planning completes.</p>
+            )}
+          </div>
+
+          {/* ③ Trace metadata */}
+          <div>
+            <div className="text-[10px] uppercase tracking-[0.15em] text-slate-500 font-semibold mb-2">③ Trace details</div>
+            <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] divide-y divide-white/[0.04]">
+              {[
+                ["MCP operation",   arize?.operation || "search_traces",                        "text-emerald-200"],
+                ["Project",         arizeProject,                                               "text-slate-100"],
+                ["Spans exported",  `${spanCount} (9 agent + 1 eval)`,                          "text-slate-100"],
+                ["Reasoning model", modelServed || "gemini-3.1-pro-preview",                    "text-violet-200"],
+                ["Exporter",        isConnected ? "OTLP → Arize AX ✓" : arizeStatus ? "set ARIZE_ENABLED=true" : "OTLP → Arize AX",
+                                    isConnected ? "text-emerald-200" : "text-slate-500"],
+                ["MCP",             arizeStatus?.mcpEnabled ? "connected" : "set MCP_ARIZE_ENABLED=true",
+                                    arizeStatus?.mcpEnabled ? "text-emerald-200" : "text-slate-500"],
+              ].map(([label, value, color]) => (
+                <div key={label as string} className="flex items-center justify-between gap-2 px-3 py-1.5">
+                  <span className="text-[11px] text-slate-500">{label}</span>
+                  <code className={`text-[11px] font-medium ${color}`}>{value}</code>
+                </div>
+              ))}
+              {tid && (
+                <div className="flex items-center justify-between gap-2 px-3 py-1.5">
+                  <span className="text-[11px] text-slate-500">Trace ID</span>
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <code className="text-[10px] text-violet-300 font-mono truncate max-w-[180px]" title={tid}>{tid}</code>
+                    <button type="button" onClick={copyTrace}
+                      className="shrink-0 text-[9px] px-1.5 py-0.5 rounded border border-violet-400/20 text-violet-300 hover:bg-violet-400/10 transition">
+                      {copied ? "✓" : "Copy"}
+                    </button>
+                  </div>
+                </div>
               )}
             </div>
-            <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
-              {([
-                ["relevance",            "Relevance",    "Plan matches this farm"],
-                ["groundedness",         "Groundedness", "Numbers from real tool data"],
-                ["agronomicCorrectness", "Agronomic",    "Crop fit for soil + season"],
-                ["hallucinationRisk",    "Hallucination","1.0 = nothing fabricated"],
-              ] as [keyof NonNullable<Parsed["evalDetails"]>, string, string][]).map(([k, label, tip]) => {
-                const v = evalDetails[k] as number | undefined;
-                if (v == null) return null;
-                const p   = Math.round(v * 100);
-                const bar = v >= 0.8 ? "bg-emerald-400" : v >= 0.6 ? "bg-cyan-400" : "bg-amber-400";
-                const txt = v >= 0.8 ? "text-emerald-300" : v >= 0.6 ? "text-cyan-300" : "text-amber-300";
-                const ico = v >= 0.8 ? "✅" : v >= 0.6 ? "🟡" : "⚠️";
-                return (
-                  <div key={k} title={tip}>
-                    <div className="flex items-center justify-between text-[10px] mb-0.5">
-                      <span className="text-slate-400 flex items-center gap-1"><span>{ico}</span>{label}</span>
-                      <span className={`font-bold ${txt}`}>{p}%</span>
-                    </div>
-                    <div className="h-1 w-full rounded-full bg-white/[0.05] overflow-hidden">
-                      <div className={`h-full rounded-full ${bar}`} style={{ width: `${p}%` }} />
-                    </div>
-                  </div>
-                );
-              })}
+          </div>
+
+          {/* ④ How to find in Arize */}
+          <div>
+            <div className="text-[10px] uppercase tracking-[0.15em] text-slate-500 font-semibold mb-2">④ Find this trace in Arize AX</div>
+            <div className="rounded-lg border border-violet-400/15 bg-violet-400/[0.03] px-3 py-2.5 space-y-1.5 text-[11px] text-slate-400">
+              <div className="flex gap-2"><span className="text-violet-300 shrink-0 font-bold">①</span><span>Go to <span className="font-mono text-slate-200">app.arize.com</span> and sign in</span></div>
+              <div className="flex gap-2"><span className="text-violet-300 shrink-0 font-bold">②</span><span>Open project <span className="font-mono text-emerald-300">{arizeProject}</span></span></div>
+              <div className="flex gap-2"><span className="text-violet-300 shrink-0 font-bold">③</span><span>Click <span className="text-slate-200 font-medium">Traces</span> — all {spanCount} spans from this run are here</span></div>
+              <div className="flex gap-2"><span className="text-violet-300 shrink-0 font-bold">④</span><span>Expand any span to see tool inputs/outputs, eval scores, and latency</span></div>
             </div>
           </div>
-        )}
 
-        {/* What Arize does */}
-        <p className="text-[12px] text-slate-300 leading-relaxed">
-          <span className="font-semibold text-emerald-300">What Arize does: </span>
-          Every step this agent runs — from fetching weather to Gemini reasoning — emits an{" "}
-          <span className="text-blue-300 font-medium">OpenTelemetry span</span> shipped in real time to Arize AX.
-          Judges can open Arize, see the full trace, run automated evals, and replay any failed plan — all without touching code.
-        </p>
-
-        {/* Metadata table */}
-        <div className="grid sm:grid-cols-2 gap-x-6 gap-y-2 text-[13px]">
-          <ArizeRow label="MCP operation"   value={arize?.operation || "search_traces"}    color="text-emerald-200" />
-          <ArizeRow label="Project"         value={arizeProject}                            color="text-slate-100"  />
-          <ArizeRow label="Spans exported"  value={`${spanCount} (9 agent + 1 eval)`}       color="text-slate-100"  />
-          <ArizeRow label="Reasoning model" value={modelServed || "gemini-3.1-pro-preview"} color="text-violet-200" />
-          <ArizeRow label="Exporter"
-            value={isConnected ? "OTLP → Arize AX ✓" : arizeStatus ? "disabled (set ARIZE_ENABLED=true)" : "OTLP → Arize AX"}
-            color={isConnected ? "text-emerald-200" : "text-slate-400"} />
-          <ArizeRow label="MCP"
-            value={arizeStatus?.mcpEnabled ? "connected" : "disabled (set MCP_ARIZE_ENABLED=true)"}
-            color={arizeStatus?.mcpEnabled ? "text-emerald-200" : "text-slate-400"} />
-          {tid && (
-            <div className="sm:col-span-2 flex justify-between gap-2 items-center">
-              <span className="text-slate-400 text-[12px]">Trace ID</span>
-              <div className="flex items-center gap-1.5 min-w-0">
-                <code className="text-[11px] text-violet-300 font-mono truncate max-w-[220px]" title={tid}>{tid}</code>
-                <button type="button" onClick={copyTrace}
-                  className="shrink-0 text-[10px] px-1.5 py-0.5 rounded border border-violet-400/20 text-violet-300 hover:bg-violet-400/10 transition">
-                  {copied ? "✓ Copied" : "Copy"}
-                </button>
-              </div>
-            </div>
+          {arize?.note && (
+            <p className="text-slate-400 leading-relaxed text-[11px] border-t border-white/[0.05] pt-3">{arize.note}</p>
           )}
-        </div>
-
-        {arize?.note && (
-          <p className="border-t border-white/5 pt-3 text-slate-300 leading-relaxed text-[12px]">{arize.note}</p>
-        )}
-
-        {/* What judges can do */}
-        <div className="rounded-lg border border-violet-400/15 bg-violet-400/[0.04] px-3 py-2.5 text-[11px] text-slate-300">
-          <div className="font-semibold text-violet-300 mb-1.5">What judges can do in Arize AX:</div>
-          <div className="grid sm:grid-cols-2 gap-x-4 gap-y-1">
-            {[
-              ["🔍 Trace replay",    "See every tool call, its input/output & latency"],
-              ["⚖️ LLM evals",       "Auto-score on hallucination, relevance, groundedness"],
-              ["🔁 Regression test", "Replay any failed trace to catch regressions"],
-              ["📊 Score trends",    "Live aggregate from every run — visible on dashboard"],
-            ].map(([k, v]) => (
-              <div key={k as string} className="flex gap-1.5">
-                <span className="flex-shrink-0">{k}</span>
-                <span className="text-slate-500">— {v}</span>
-              </div>
-            ))}
-          </div>
         </div>
       </div>
     </details>
@@ -585,6 +590,24 @@ function ResultCard({
 
   return (
     <div className="space-y-4">
+
+      {/* ── "Result" section header ── */}
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-2">
+          <div className="h-px w-5 bg-emerald-400/50" />
+          <span className="text-[10px] uppercase tracking-[0.2em] text-emerald-300/80 font-semibold">Result</span>
+        </div>
+        <div className="flex items-center gap-2 text-[11px] text-slate-500 font-mono">
+          {latencyMs && (
+            <span className="bg-white/[0.03] border border-white/[0.06] px-2.5 py-0.5 rounded-full">
+              {latencyMs}ms
+            </span>
+          )}
+          <span className="bg-white/[0.03] border border-white/[0.06] px-2.5 py-0.5 rounded-full">
+            {view._modelServed ?? "gemini-3.1-pro-preview"}
+          </span>
+        </div>
+      </div>
 
       {/* ── Offline quota notice ── */}
       {isOffline && view._reason?.includes("quota") && (
