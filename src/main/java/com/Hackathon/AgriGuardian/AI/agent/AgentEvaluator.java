@@ -78,17 +78,14 @@ public class AgentEvaluator {
     public EvalResult evaluate(String recommendationJson, Map<String, Object> toolContext) {
         Span span = tracer.spanBuilder("evaluator.eval")
                 // ── OpenInference semantic conventions (Arize AX 2026) ──────────
-                // "EVALUATOR" is the dedicated kind for LLM-as-judge spans —
-                // Arize renders them with a special ⚖️ icon in the trace tree and
-                // groups their scores in the Evals tab automatically.
                 .setAttribute(AttributeKey.stringKey("openinference.span.kind"), "EVALUATOR")
-                // eval.name tells Arize which evaluator template this maps to
                 .setAttribute(AttributeKey.stringKey("eval.name"),               "agriguardian-llm-judge")
-                // input.value = the payload being evaluated (truncated for span size)
+                .setAttribute(AttributeKey.longKey("eval.dimension.count"),      4L)
                 .setAttribute(AttributeKey.stringKey("input.value"),
                         recommendationJson != null && recommendationJson.length() > 1000
                                 ? recommendationJson.substring(0, 1000) + "..." : (recommendationJson != null ? recommendationJson : ""))
                 .startSpan();
+        long t0 = System.nanoTime();
         try (var s = span.makeCurrent()) {
             EvalResult r;
             try {
@@ -97,6 +94,7 @@ public class AgentEvaluator {
                 log.warn("LLM judge failed ({}) — falling back to rubric scorer", ex.toString());
                 r = evaluateRubric(recommendationJson, toolContext);
             }
+            long latencyMs = (System.nanoTime() - t0) / 1_000_000L;
             // OpenInference + Arize eval span conventions
             span.setAttribute(AttributeKey.stringKey("eval.judge"),                            r.judge());
             span.setAttribute(AttributeKey.doubleKey("eval.score.relevance"),                  r.relevance());
@@ -104,12 +102,18 @@ public class AgentEvaluator {
             span.setAttribute(AttributeKey.doubleKey("eval.score.agronomic_correctness"),      r.agronomicCorrectness());
             span.setAttribute(AttributeKey.doubleKey("eval.score.hallucination_risk"),         r.hallucinationRisk());
             span.setAttribute(AttributeKey.doubleKey("eval.score.aggregate"),                  r.aggregate());
-            // Binary pass/fail label — Arize groups these in the Evals tab
-            span.setAttribute(AttributeKey.stringKey("eval.label"),                            r.aggregate() >= 0.70 ? "pass" : "fail");
-            span.setAttribute(AttributeKey.booleanKey("eval.passed"),                          r.aggregate() >= 0.70);
-            span.setAttribute(AttributeKey.stringKey("output.value"),
-                    String.format("{\"aggregate\":%.3f,\"relevance\":%.3f,\"groundedness\":%.3f,\"agronomic\":%.3f,\"hallucination\":%.3f,\"judge\":\"%s\"}",
-                            r.aggregate(), r.relevance(), r.groundedness(), r.agronomicCorrectness(), r.hallucinationRisk(), r.judge()));
+            span.setAttribute(AttributeKey.longKey("eval.latency_ms"),                         latencyMs);
+            // Binary pass/fail label
+            span.setAttribute(AttributeKey.stringKey("eval.label"),   r.aggregate() >= 0.70 ? "pass" : "fail");
+            span.setAttribute(AttributeKey.booleanKey("eval.passed"), r.aggregate() >= 0.70);
+            String resultJson = String.format(
+                    "{\"aggregate\":%.3f,\"relevance\":%.3f,\"groundedness\":%.3f,\"agronomic\":%.3f,\"hallucination\":%.3f,\"judge\":\"%s\",\"latency_ms\":%d}",
+                    r.aggregate(), r.relevance(), r.groundedness(), r.agronomicCorrectness(),
+                    r.hallucinationRisk(), r.judge(), latencyMs);
+            span.setAttribute(AttributeKey.stringKey("output.value"), resultJson);
+            // OpenInference output message — makes result visible in Arize trace
+            span.setAttribute(AttributeKey.stringKey("llm.output_messages.0.message.role"),    "assistant");
+            span.setAttribute(AttributeKey.stringKey("llm.output_messages.0.message.content"), resultJson);
             return r;
         } finally {
             span.end();
@@ -120,39 +124,72 @@ public class AgentEvaluator {
 
     private EvalResult evaluateWithJudge(String recommendationJson, Map<String, Object> ctx) {
         String judgeSystem = """
-            You are an EVALUATOR for an agronomy agent. Score the recommendation
-            against the supplied tool context. Return ONLY compact JSON:
+            You are a STRICT evaluator for an AI agronomy planning agent. Your job is to score
+            the agent's recommendation JSON against the real tool data it was given.
+            Return ONLY compact JSON with no markdown fences:
               {"relevance":0..1,"groundedness":0..1,"agronomic_correctness":0..1,
-               "hallucination_risk":0..1,"reason":"<short>"}
-            Definitions:
-              relevance              = does the plan address the farm scenario?
-              groundedness           = are the impact numbers consistent with weather + market context?
-              agronomic_correctness  = does the crop suit season + soil + latitude?
-              hallucination_risk     = 1 = no fabrication detected, 0 = clearly fabricated.
-            Be strict; do not inflate.
+               "hallucination_risk":0..1,"reason":"<25 words max>"}
+
+            SCORING RUBRIC (be strict — do NOT inflate scores):
+
+            relevance (0..1):
+              1.0 = plan directly addresses the farm's soil, coordinates, season, and scenario
+              0.7 = plan is generally appropriate but misses one farm-specific detail
+              0.4 = plan is generic, could apply to any farm
+              0.0 = plan is irrelevant or empty
+
+            groundedness (0..1):
+              1.0 = all impact numbers (revenue, yield%, cost, payback) are plausible given
+                    the weather and market tool data; no impossible figures
+              0.7 = numbers are roughly consistent with tool data (±30%)
+              0.4 = numbers appear fabricated or contradict tool data
+              0.0 = completely made-up figures with no basis in tool outputs
+
+            agronomic_correctness (0..1):
+              1.0 = recommended crop is ideal for this EXACT season + soil type + latitude
+                    (e.g. watermelon for ZAID + sandy soil at 23°N is 1.0)
+              0.7 = crop is acceptable but not the best fit (wrong soil or borderline season)
+              0.4 = crop is a poor fit (wrong season or soil)
+              0.0 = crop recommendation is agronomically wrong (e.g. wheat in peak monsoon)
+
+            hallucination_risk (0..1):
+              1.0 = no fabricated facts — every claim traceable to tool data or known agronomy
+              0.7 = minor unsupported claims (e.g. exact pesticide name without source)
+              0.4 = significant fabrications (invented mandi prices, non-existent schemes)
+              0.0 = entire plan appears fabricated
+
+            If the JSON contains "_source":"offline-fallback", score relevance=0.6,
+            groundedness=0.7, agronomic_correctness=0.7, hallucination_risk=0.9 (offline
+            plans are deterministic so they don't hallucinate, but aren't Gemini-personalised).
             """;
 
         Map<String, Object> evalCtx = new LinkedHashMap<>();
         evalCtx.put("recommendation", recommendationJson);
         if (ctx != null) {
             evalCtx.put("weather", ctx.get("weather"));
-            evalCtx.put("soil", ctx.get("soil"));
-            evalCtx.put("market", ctx.get("market"));
+            evalCtx.put("soil",    ctx.get("soil"));
+            evalCtx.put("market",  ctx.get("market"));
         }
-        String judgeUser = "Score the recommendation. Return JSON only.";
 
+        // Add the judge prompt as input message for Arize trace visibility
+        Span current = io.opentelemetry.api.trace.Span.current();
+        current.setAttribute(AttributeKey.stringKey("llm.input_messages.0.message.role"),    "system");
+        current.setAttribute(AttributeKey.stringKey("llm.input_messages.0.message.content"), judgeSystem.substring(0, Math.min(judgeSystem.length(), 1500)));
+        current.setAttribute(AttributeKey.stringKey("llm.input_messages.1.message.role"),    "user");
+        current.setAttribute(AttributeKey.stringKey("llm.input_messages.1.message.content"), "Score the recommendation. Return JSON only.");
+        current.setAttribute(AttributeKey.stringKey("llm.invocation_parameters"),
+                "{\"temperature\":0.1,\"task\":\"evaluation\"}");
+
+        String judgeUser = "Score the recommendation. Return JSON only.";
         String raw = gemini.generate(judgeSystem, judgeUser, evalCtx);
         if (raw == null || raw.isBlank()) throw new IllegalStateException("empty judge response");
 
-        // Pull first {...}; tolerant of code fences.
         Matcher m = JSON_OBJECT.matcher(raw);
         if (!m.find()) throw new IllegalStateException("no JSON in judge response");
         JsonNode n;
         try { n = JSON.readTree(m.group()); }
         catch (Exception e) { throw new IllegalStateException("unparseable judge JSON: " + e.getMessage()); }
 
-        // Stub mode produces our farm-plan JSON, which lacks these keys —
-        // detect that and fall back to rubric so the score is still meaningful.
         if (!n.has("relevance") && !n.has("groundedness")) {
             throw new IllegalStateException("judge JSON missing eval keys (likely stub mode)");
         }

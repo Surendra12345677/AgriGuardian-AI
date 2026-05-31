@@ -55,6 +55,14 @@ export type EvalTrendPoint = {
   traceId?: string;
   evalScore: number | null;
   judge?: string;
+  evalDetails?: {
+    relevance?: number;
+    groundedness?: number;
+    agronomicCorrectness?: number;
+    hallucinationRisk?: number;
+    aggregate?: number;
+    judge?: string;
+  } | null;
   createdAt: string;
 };
 
@@ -150,6 +158,14 @@ export const api = {
     }),
   evalTrend:       (limit = 20)  => http<EvalTrend>(`/api/v1/eval/quality-trend?limit=${limit}`),
   evalDistribution:(limit = 100) => http<EvalDistribution>(`/api/v1/eval/distribution?limit=${limit}`),
+  arizeStatus:     () => http<{
+    exporterEnabled: boolean;
+    mcpEnabled: boolean;
+    projectName: string;
+    otlpEndpoint: string;
+    spaceIdHint: string;
+    batchDelayMs: number;
+  }>("/api/v1/arize/status"),
 
   // ── Agent Feedback Loop — failed traces → regression tests ──────
   feedbackFailures: (threshold = 0.6, limit = 20) =>

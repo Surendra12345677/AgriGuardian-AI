@@ -191,7 +191,13 @@ public class AgentOrchestrator {
                 .setAttribute(AttributeKey.stringKey("openinference.span.kind"),  "AGENT")
                 .setAttribute(AttributeKey.stringKey("session.id"),               req.farmId())
                 .setAttribute(AttributeKey.stringKey("user.id"),                  req.farmId())
-                .setAttribute(AttributeKey.stringKey("input.value"),              req.farmId() + "/" + req.scenario() + "/" + req.preferredCrop())
+                .setAttribute(AttributeKey.stringKey("input.value"),              req.farmId() + "/" + (req.scenario() == null ? "BASELINE" : req.scenario()) + "/" + req.preferredCrop())
+                // Agent pipeline metadata
+                .setAttribute(AttributeKey.stringKey("agent.scenario"),           req.scenario() == null ? "BASELINE" : req.scenario())
+                .setAttribute(AttributeKey.stringKey("agent.language"),           req.language() == null ? "en" : req.language())
+                .setAttribute(AttributeKey.stringKey("agent.farm.id"),            req.farmId())
+                .setAttribute(AttributeKey.doubleKey("agent.farm.latitude"),      req.latitude()  == null ? 0.0 : req.latitude())
+                .setAttribute(AttributeKey.doubleKey("agent.farm.longitude"),     req.longitude() == null ? 0.0 : req.longitude())
                 // legacy
                 .setAttribute(AttributeKey.stringKey("farm.id"),                  req.farmId())
                 .startSpan();
@@ -292,12 +298,14 @@ public class AgentOrchestrator {
                 toolFutures.add(f);
             }
 
-            // Wait for all tools to finish (or timeout at 20 s total).
+            // Wait for all tools to finish (or timeout at 12 s total).
+            // Tools are fully parallel so 12 s = slowest single call, not sum.
+            // Reducing from 20 s trims worst-case latency without dropping data.
             try {
                 CompletableFuture.allOf(toolFutures.toArray(new CompletableFuture[0]))
-                        .get(20, java.util.concurrent.TimeUnit.SECONDS);
+                        .get(12, java.util.concurrent.TimeUnit.SECONDS);
             } catch (java.util.concurrent.TimeoutException te) {
-                log.warn("Tool parallel batch timed out after 20 s — proceeding with partial results");
+                log.warn("Tool parallel batch timed out after 12 s — proceeding with partial results");
             } catch (Exception ie) {
                 log.warn("Tool parallel batch interrupted: {}", ie.toString());
             } finally {
@@ -526,6 +534,13 @@ public class AgentOrchestrator {
                     .build();
             Recommendation saved = repo.save(rec);
             log.info("Persisted recommendation id={} farmId={}", saved.getId(), saved.getFarmId());
+
+            // Stamp output metadata on root span so Arize shows the final result
+            root.setAttribute(AttributeKey.stringKey("output.value"),           reflected != null ? (reflected.length() > 500 ? reflected.substring(0, 500) + "..." : reflected) : "");
+            root.setAttribute(AttributeKey.stringKey("agent.recommendation.id"), saved.getId());
+            root.setAttribute(AttributeKey.longKey("agent.plan.steps"),          (long) plan.size());
+            root.setAttribute(AttributeKey.stringKey("agent.season"),            season);
+            root.setAttribute(AttributeKey.stringKey("agent.soil.hint"),         soilHint);
 
             // Cache immediately — only live (non-offline) results.
             boolean offline = reflected != null && reflected.contains("\"_source\":\"offline-fallback\"");

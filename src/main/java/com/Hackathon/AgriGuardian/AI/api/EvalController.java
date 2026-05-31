@@ -37,6 +37,7 @@ public class EvalController {
             String  traceId,
             Double  evalScore,
             String  judge,
+            Map<String, Object> evalDetails,
             Instant createdAt
     ) {}
 
@@ -100,6 +101,7 @@ public class EvalController {
                     r.getTraceId(),
                     score,
                     r.getEvalJudge(),
+                    r.getEvalDetails(),
                     r.getCreatedAt()
             ));
             if (score != null) {

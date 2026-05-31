@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { api, type EvalDistribution, type EvalTrend, type EvalTrendPoint } from "@/lib/api";
+import { api, type EvalDistribution, type EvalTrend } from "@/lib/api";
 
 
 /* ─── What each dimension means — plain English for farmers & judges ─── */
@@ -13,9 +13,14 @@ const DIMS: [string, string, string, string][] = [
 ];
 
 export function EvalQualityCard({ refreshMs = 6000 }: { refreshMs?: number }) {
-  const [dist,  setDist]  = useState<EvalDistribution | null>(null);
-  const [trend, setTrend] = useState<EvalTrend | null>(null);
-  const [err,   setErr]   = useState<string | null>(null);
+  const [dist,        setDist]        = useState<EvalDistribution | null>(null);
+  const [trend,       setTrend]       = useState<EvalTrend | null>(null);
+  const [arizeStatus, setArizeStatus] = useState<{ exporterEnabled: boolean; mcpEnabled: boolean; projectName: string; otlpEndpoint: string; spaceIdHint: string } | null>(null);
+  const [err,         setErr]         = useState<string | null>(null);
+
+  useEffect(() => {
+    api.arizeStatus().then(setArizeStatus).catch(() => {/* non-fatal */});
+  }, []);
 
   useEffect(() => {
     let stopped = false;
@@ -40,9 +45,18 @@ export function EvalQualityCard({ refreshMs = 6000 }: { refreshMs?: number }) {
   const avg       = dist?.averageScore;
   const series    = trend?.series ?? [];
   const scores    = series.map(p => p.evalScore).filter((s): s is number => s != null);
-  const latest    = series[series.length - 1] as (EvalTrendPoint & { evalDetails?: Record<string, number> }) | undefined;
-  const dims      = latest ? (latest as any).evalDetails as Record<string, number> | undefined : undefined;
-  const delta     = trend?.deltaScore;
+  const latest    = series[series.length - 1] as (typeof series[number] & { evalDetails?: Record<string, number | string> }) | undefined;
+  const dims      = latest?.evalDetails as Record<string, number | string> | undefined;
+  const judgeUsed = (dims?.judge as string) ?? latest?.judge;
+
+  // deltaScore is computed server-side as (latestScore - firstScore) over the window
+  const delta = trend?.deltaScore ?? null;
+
+  const isConnected = arizeStatus?.exporterEnabled ?? false;
+  const projectName = arizeStatus?.projectName ?? process.env.NEXT_PUBLIC_ARIZE_PROJECT_NAME ?? "agriguardian-ai";
+  const spaceId     = arizeStatus?.spaceIdHint  ?? process.env.NEXT_PUBLIC_ARIZE_SPACE_ID    ?? "";
+  const arizeBase   = spaceId ? `https://app.arize.com/organizations/${spaceId}` : "https://app.arize.com";
+  const arizeUrl    = `${arizeBase}/projects/${projectName}/traces`;
 
   const trendBadge =
     delta == null   ? null
@@ -62,6 +76,11 @@ export function EvalQualityCard({ refreshMs = 6000 }: { refreshMs?: number }) {
             <span className="text-[10px] px-1.5 py-0.5 rounded bg-violet-400/15 text-violet-300 font-semibold uppercase tracking-wide">
               Arize AI
             </span>
+            {arizeStatus != null && (
+              isConnected
+                ? <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-400/15 text-emerald-300 font-semibold uppercase tracking-wider animate-pulse">live</span>
+                : <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-400/15 text-slate-400 font-semibold uppercase tracking-wider">offline</span>
+            )}
           </div>
           <p className="text-[11px] text-slate-500 mt-0.5">
             Every farm plan is automatically scored by a second AI for quality
@@ -76,8 +95,32 @@ export function EvalQualityCard({ refreshMs = 6000 }: { refreshMs?: number }) {
       <div className="rounded-lg border border-violet-400/15 bg-violet-400/[0.04] px-3 py-2.5 text-[11px] text-slate-300 leading-relaxed">
         <span className="font-semibold text-violet-200">What Arize does: </span>
         After Gemini creates a farm plan, a separate AI judge (also Gemini) reads the plan and scores it on 4 quality checks.
-        These scores are stored in Arize AX — a monitoring platform built for AI applications —
-        so we can track if plan quality improves or declines over time.
+        Every score is sent as an <span className="text-blue-300">OpenTelemetry span</span> to{" "}
+        <span className="text-violet-200 font-medium">Arize AX</span> over OTLP — so you can see quality trends, replay failed traces, and catch regressions, all without touching code.
+      </div>
+
+      {/* ── Arize project nav for judges ── */}
+      <div className="rounded-lg border border-emerald-400/20 bg-emerald-400/[0.04] px-3 py-2.5 space-y-2">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <span className="text-[11px] font-semibold text-emerald-300">🔗 View live in Arize AX</span>
+          {spaceId ? (
+            <a href={arizeUrl} target="_blank" rel="noreferrer"
+               className="text-[10px] px-2 py-0.5 rounded border border-emerald-400/40 text-emerald-200 hover:bg-emerald-400/10 shrink-0">
+              Open Arize →
+            </a>
+          ) : (
+            <a href="https://app.arize.com" target="_blank" rel="noreferrer"
+               className="text-[10px] px-2 py-0.5 rounded border border-violet-400/30 text-violet-300 hover:bg-violet-400/10 shrink-0">
+              app.arize.com →
+            </a>
+          )}
+        </div>
+        <div className="text-[10px] text-slate-400 space-y-0.5">
+          <div className="flex gap-1.5"><span className="text-violet-300 shrink-0">①</span><span>Go to <span className="font-mono text-slate-300">app.arize.com</span> and log in</span></div>
+          <div className="flex gap-1.5"><span className="text-violet-300 shrink-0">②</span><span>Select project <span className="font-mono text-emerald-300">{projectName}</span></span></div>
+          <div className="flex gap-1.5"><span className="text-violet-300 shrink-0">③</span><span>Click <span className="text-slate-200">Traces</span> in the left sidebar — all agent runs appear here</span></div>
+          <div className="flex gap-1.5"><span className="text-violet-300 shrink-0">④</span><span>Click any trace to see all 9 spans, tool inputs/outputs, and eval scores</span></div>
+        </div>
       </div>
 
       {/* ── Overall score headline ── */}
@@ -120,12 +163,22 @@ export function EvalQualityCard({ refreshMs = 6000 }: { refreshMs?: number }) {
       {/* ── 4 quality dimensions — plain English ── */}
       {dims ? (
         <div>
-          <div className="text-[11px] text-slate-400 font-medium mb-2">
-            ✅ Last plan's quality checks
+          <div className="flex items-center gap-2 mb-2">
+            <div className="text-[11px] text-slate-400 font-medium">
+              ✅ Last plan&apos;s quality checks
+            </div>
+            {judgeUsed && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-violet-400/10 text-violet-300 border border-violet-400/15 font-mono ml-auto">
+                {judgeUsed}
+              </span>
+            )}
           </div>
           <div className="space-y-2">
             {DIMS.map(([key, label, tip]) => {
-              const v = dims[key] ?? dims[key.replace(/([A-Z])/g, "_$1").toLowerCase()];
+              const v = typeof dims[key] === "number" ? dims[key] as number
+                      : typeof dims[key.replace(/([A-Z])/g, "_$1").toLowerCase()] === "number"
+                        ? dims[key.replace(/([A-Z])/g, "_$1").toLowerCase()] as number
+                        : undefined;
               if (v == null) return null;
               const pct100  = Math.round(v * 100);
               const barColor =

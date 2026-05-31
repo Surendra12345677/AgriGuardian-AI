@@ -66,42 +66,58 @@ public class GeminiClientReal implements GeminiClient {
     @Override
     public String generate(String systemPrompt, String userPrompt, Map<String, Object> context) {
         // Use the configured primary model (gemini-3.1-pro-preview by default).
-        // gemini-3-pro-preview was retired by Google on 2026-05-30; the direct
-        // replacement is gemini-3.1-pro-preview (same Gemini 3 Pro family, confirmed
-        // working HTTP 200, stable through at least Q4 2026).
         String model = (cfg.getModel() != null && !cfg.getModel().isBlank())
                 ? cfg.getModel().trim() : "gemini-3.1-pro-preview";
 
         long promptTokens = (systemPrompt.length() + userPrompt.length()) / 4;
+        String fullPrompt = systemPrompt + "\n" + userPrompt;
+
         Span span = tracer.spanBuilder("gemini.generate")
                 // ── OpenInference semantic conventions (Arize AX 2026) ──────────
-                // These make Arize render prompt/response content in the trace UI.
                 .setAttribute(AttributeKey.stringKey("openinference.span.kind"),     "LLM")
                 .setAttribute(AttributeKey.stringKey("llm.model_name"),               model)
                 .setAttribute(AttributeKey.stringKey("llm.provider"),                 "google")
                 .setAttribute(AttributeKey.stringKey("llm.system"),                   "google")
                 .setAttribute(AttributeKey.longKey("llm.token_count.prompt"),         promptTokens)
-                .setAttribute(AttributeKey.stringKey("input.value"),                  truncate(systemPrompt + "\n" + userPrompt, 2000))
+                // OpenInference message attributes — Arize renders these as prompt viewer
+                .setAttribute(AttributeKey.stringKey("llm.input_messages.0.message.role"),    "system")
+                .setAttribute(AttributeKey.stringKey("llm.input_messages.0.message.content"), truncate(systemPrompt, 2000))
+                .setAttribute(AttributeKey.stringKey("llm.input_messages.1.message.role"),    "user")
+                .setAttribute(AttributeKey.stringKey("llm.input_messages.1.message.content"), truncate(userPrompt, 1000))
+                // Invocation params visible in Arize span detail panel
+                .setAttribute(AttributeKey.stringKey("llm.invocation_parameters"),
+                        "{\"model\":\"" + model + "\",\"temperature\":0.35,\"maxOutputTokens\":2500,\"responseMimeType\":\"application/json\"}")
+                .setAttribute(AttributeKey.stringKey("input.value"),                  truncate(fullPrompt, 2000))
                 .setAttribute(AttributeKey.stringKey("input.mime_type"),               "text/plain")
                 // legacy compat
                 .setAttribute(AttributeKey.stringKey("model"),                         model)
                 .setAttribute(AttributeKey.longKey("prompt.tokens.estimate"),          promptTokens)
                 .startSpan();
+        long t0 = System.nanoTime();
         try (var scope = span.makeCurrent()) {
             try {
                 String out = doGenerate(systemPrompt, userPrompt, context, span, model);
                 out = stampModelServed(out, model);
-                span.setAttribute(AttributeKey.stringKey("gemini.model.served"),        model);
-                span.setAttribute(AttributeKey.stringKey("output.value"),               truncate(out, 2000));
-                span.setAttribute(AttributeKey.stringKey("output.mime_type"),           "application/json");
-                span.setAttribute(AttributeKey.longKey("llm.token_count.completion"),   (long)(out.length() / 4));
+                long latencyMs = (System.nanoTime() - t0) / 1_000_000L;
+                long completionTokens = out.length() / 4;
+                span.setAttribute(AttributeKey.stringKey("gemini.model.served"),          model);
+                span.setAttribute(AttributeKey.stringKey("output.value"),                 truncate(out, 2000));
+                span.setAttribute(AttributeKey.stringKey("output.mime_type"),             "application/json");
+                span.setAttribute(AttributeKey.longKey("llm.token_count.completion"),     completionTokens);
+                span.setAttribute(AttributeKey.longKey("llm.token_count.total"),          promptTokens + completionTokens);
+                span.setAttribute(AttributeKey.longKey("llm.latency_ms"),                 latencyMs);
+                // Output message for Arize prompt viewer
+                span.setAttribute(AttributeKey.stringKey("llm.output_messages.0.message.role"),    "assistant");
+                span.setAttribute(AttributeKey.stringKey("llm.output_messages.0.message.content"), truncate(out, 2000));
                 return out;
             } catch (GeminiOfflineSignal sig) {
+                long latencyMs = (System.nanoTime() - t0) / 1_000_000L;
                 log.error("Gemini model={} unavailable — serving offline plan. Reason: {}",
                         model, sig.getMessage());
                 span.setAttribute(AttributeKey.stringKey("gemini.fallback"),             "offline-plan");
                 span.setAttribute(AttributeKey.stringKey("gemini.offline.reason"),       sig.getMessage());
                 span.setAttribute(AttributeKey.stringKey("output.value"),               "offline-fallback");
+                span.setAttribute(AttributeKey.longKey("llm.latency_ms"),               latencyMs);
                 return offlineDemoPlan(context, sig.getMessage());
             }
         } finally {

@@ -57,20 +57,27 @@ public class OpenTelemetryConfig {
                 .setEndpoint(cfg.getOtlpEndpoint() + "/traces")
                 .addHeader("space_id", cfg.getSpaceId())
                 .addHeader("api_key", cfg.getApiKey())
-                .setTimeout(Duration.ofSeconds(10))
+                .setTimeout(Duration.ofSeconds(8))
                 .build();
 
         Resource resource = Resource.getDefault().merge(Resource.create(Attributes.builder()
                 .put(AttributeKey.stringKey("service.name"),    cfg.getProjectName())
+                .put(AttributeKey.stringKey("service.version"), SERVICE_VERSION)
                 .put(AttributeKey.stringKey("model_id"),         cfg.getProjectName())
                 .put(AttributeKey.stringKey("model_version"),    SERVICE_VERSION)
                 // OpenInference resource attrs — tells Arize AX this is an LLM app
                 .put(AttributeKey.stringKey("openinference.project.name"), cfg.getProjectName())
+                // Deployment metadata visible in Arize project settings
+                .put(AttributeKey.stringKey("deployment.environment"), "production")
+                .put(AttributeKey.stringKey("telemetry.sdk.name"),    "opentelemetry")
                 .build()));
 
         sdkTracerProvider = SdkTracerProvider.builder()
                 .addSpanProcessor(BatchSpanProcessor.builder(exporter)
-                        .setScheduleDelay(Duration.ofSeconds(2))
+                        // 500 ms instead of 2 s: spans appear in Arize within ~1 s of completion.
+                        // Critical for live demo — the judge can watch spans stream in real time.
+                        .setScheduleDelay(Duration.ofMillis(500))
+                        .setMaxExportBatchSize(256)
                         .build())
                 .setResource(resource)
                 .build();
