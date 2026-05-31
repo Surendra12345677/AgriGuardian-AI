@@ -69,7 +69,7 @@ services:
       MONGODB_URI: mongodb://mongo:27017/agriguardian
       # Pulled from .env (docker compose auto-loads it). Empty → stub mode.
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
-      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.1-pro-preview}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3-pro-preview}
       GEMINI_STUB_MODE: ${GEMINI_STUB_MODE:-auto}
       # Arize AX — observability (partner-track channel)
       ARIZE_ENABLED:        ${ARIZE_ENABLED:-false}

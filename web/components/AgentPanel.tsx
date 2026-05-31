@@ -707,7 +707,7 @@ function ArizePanel({ arize, traceId, modelServed, evalScore, evalDetails, evalJ
                 ["MCP operation",   arize?.operation || "search_traces",                        "text-emerald-200"],
                 ["Project",         arizeProject,                                               "text-slate-100"],
                 ["Spans exported",  `${spanCount} (9 agent + 1 eval)`,                          "text-slate-100"],
-                ["Reasoning model", modelServed || "gemini-3.1-pro-preview",                    "text-violet-200"],
+                ["Reasoning model", modelServed || "gemini-3-pro-preview",                    "text-violet-200"],
                 ["Exporter",        isConnected ? "OTLP → Arize AX ✓" : arizeStatus ? "set ARIZE_ENABLED=true" : "OTLP → Arize AX",
                                     isConnected ? "text-emerald-200" : "text-slate-500"],
                 ["MCP",             arizeStatus?.mcpEnabled ? "connected" : "set MCP_ARIZE_ENABLED=true",
@@ -777,7 +777,7 @@ function ResultCard({
   onSetCrop: (c: string) => void;
 }) {
   const isOffline = view._source === "offline-fallback";
-  const model = view._modelServed ?? "gemini-3.1-pro-preview";
+  const model = view._modelServed ?? "gemini-3-pro-preview";
   const spanCount = view.arize?.spansExported ?? 9;
 
   return (

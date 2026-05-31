@@ -23,7 +23,7 @@ public class AgriGuardianProperties {
         /** API key — blank ⇒ stub mode kicks in. */
         private String apiKey = "";
         @NotBlank
-        private String model = "gemini-3.1-pro-preview";
+        private String model = "gemini-3-pro-preview";
         /**
          * Fallback model chain — tried in order when the primary Gemini 3 model
          * returns 404 / 429 / 5xx.  All entries are Gemini 3 family.

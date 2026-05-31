@@ -45,12 +45,12 @@ management:
 agriguardian:
   gemini:
     api-key: ${GEMINI_API_KEY:}
-    # Gemini 3.1 Pro Preview — current non-deprecated Gemini 3 Pro model.
-    # gemini-3-pro-preview was retired; gemini-3.1-pro-preview is the
-    # drop-in replacement (same capability, Gemini 3 family).
-    # Fallback chain: gemini-3.5-flash → gemini-2.5-flash → gemini-2.0-flash
-    model: ${GEMINI_MODEL:gemini-3.1-pro-preview}
-    fallback-models: ${GEMINI_FALLBACK_MODELS:gemini-3.5-flash,gemini-2.5-flash,gemini-2.0-flash}
+    # gemini-3-pro-preview — Gemini 3 Pro (required by hackathon).
+    # Fallback chain stays in the Gemini 3 family:
+    #   gemini-3-flash-preview = faster/cheaper Gemini 3
+    #   gemini-2.5-pro         = safety net only if Gemini 3 preview is down
+    model: ${GEMINI_MODEL:gemini-3-pro-preview}
+    fallback-models: ${GEMINI_FALLBACK_MODELS:gemini-3-flash-preview,gemini-2.5-pro}
     base-url: https://generativelanguage.googleapis.com/v1beta
     stub-mode: ${GEMINI_STUB_MODE:auto}   # auto | always | never
     timeout-seconds: 30
