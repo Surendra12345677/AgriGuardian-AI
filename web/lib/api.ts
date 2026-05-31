@@ -168,6 +168,7 @@ export const api = {
     projectName: string;
     otlpEndpoint: string;
     spaceIdHint: string;
+    arizeOrgId: string;
     batchDelayMs: number;
   }>("/api/v1/arize/status"),
 

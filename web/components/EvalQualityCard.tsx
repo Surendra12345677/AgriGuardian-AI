@@ -47,7 +47,7 @@ export function EvalQualityCard({ refreshMs = 6000 }: { refreshMs?: number }) {
 
   const isConnected = arizeStatus?.exporterEnabled ?? false;
   const projectName = arizeStatus?.projectName ?? process.env.NEXT_PUBLIC_ARIZE_PROJECT_NAME ?? "agriguardian-ai";
-  const spaceId     = arizeStatus?.spaceIdHint  ?? process.env.NEXT_PUBLIC_ARIZE_SPACE_ID    ?? "";
+  const spaceId     = (arizeStatus as any)?.arizeOrgId ?? arizeStatus?.spaceIdHint ?? process.env.NEXT_PUBLIC_ARIZE_SPACE_ID ?? "";
   const arizeBase   = spaceId ? `https://app.arize.com/organizations/${spaceId}` : "https://app.arize.com";
   const arizeUrl    = `${arizeBase}/projects/${projectName}/traces`;
 

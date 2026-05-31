@@ -106,7 +106,7 @@ export default function Navbar() {
 
         <div className="flex items-center gap-2.5 xl:gap-3">
           <a className="hidden sm:inline-flex btn-ghost text-sm xl:text-[15px] 2xl:text-base !py-2 !px-3.5 xl:!py-2.5 xl:!px-4 2xl:!py-3 2xl:!px-5"
-             href="/swagger-ui.html" target="_blank" rel="noreferrer">API</a>
+             href="https://agriguardian-ai-zqafbkccaa-uc.a.run.app/api/v1/farms" target="_blank" rel="noreferrer">API</a>
           <a className="hidden sm:inline-flex btn-ghost text-sm xl:text-[15px] 2xl:text-base !py-2 !px-3.5 xl:!py-2.5 xl:!px-4 2xl:!py-3 2xl:!px-5 items-center gap-1.5"
              href="https://github.com/Surendra12345677/AgriGuardian-AI"
              target="_blank" rel="noreferrer">

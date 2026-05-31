@@ -19,6 +19,7 @@ type Parsed = {
   evalDetails?: { relevance?: number; groundedness?: number; agronomicCorrectness?: number; hallucinationRisk?: number; aggregate?: number; judge?: string };
   evalJudge?: string;
   _basis?: {
+    date?: string;
     season?: string;
     month?: number;
     latitude?: number;
@@ -55,6 +56,7 @@ export default function AgentPanel({
   const [evalPending, setEvalPending] = useState(false);
   const elapsedRef  = useRef<ReturnType<typeof setInterval> | null>(null);
   const evalPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const resultRef   = useRef<HTMLDivElement | null>(null);
 
   // Track which farm the currently-displayed result belongs to. When the
   // user switches the active farm in the FarmContextBar above (same
@@ -80,6 +82,16 @@ export default function AgentPanel({
 
   // Cleanup eval poll on unmount
   useEffect(() => { return () => { if (evalPollRef.current) clearInterval(evalPollRef.current); }; }, []);
+
+  // Auto-scroll to result when recommendation arrives so the user doesn't
+  // have to scroll back up after waiting 25-30 s for Gemini.
+  useEffect(() => {
+    if (rec && resultRef.current) {
+      setTimeout(() => {
+        resultRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 100);
+    }
+  }, [rec?.id]); // only scroll on new rec, not on eval updates
 
   // Poll for async eval score — runs after rec arrives with null evalScore.
   // The Gemini judge takes ~8-15 s in the background; we poll every 3 s for up to 60 s.
@@ -152,32 +164,84 @@ export default function AgentPanel({
   const parsed: Parsed = (() => {
     const raw = (rec?.reasoning ?? "").trim();
     if (!raw) return {};
+
+    // Helper: strip every known wrapper and return clean text
+    function clean(s: string): string {
+      return s
+        .replace(/^```(?:json)?\s*/im, "")   // opening fence
+        .replace(/\s*```\s*$/m, "")           // closing fence
+        .replace(/^`([^`]+)`$/, "$1")         // single backtick wrapping
+        .trim();
+    }
+
     // 1. Direct parse
     try { return JSON.parse(raw); } catch {}
-    // 2. Strip markdown fences
-    const noFence = raw
-      .replace(/^```(?:json)?\s*/i, "")
-      .replace(/\s*```\s*$/, "")
-      .trim();
-    try { return JSON.parse(noFence); } catch {}
-    // 3. Extract first {...} block
-    const m = noFence.match(/\{[\s\S]*\}/);
-    if (m) { try { return JSON.parse(m[0]); } catch {} }
-    // 4. Last resort — show text as advice
+
+    // 2. Strip markdown/backtick fences
+    const stripped = clean(raw);
+    try { return JSON.parse(stripped); } catch {}
+
+    // 3. Extract FIRST complete JSON object (handles leading/trailing prose)
+    const allMatches = [...stripped.matchAll(/\{[\s\S]*?\}(?=\s*$|\s*\n\s*[^{]|$)/g)];
+    // Try the largest match first (greedy full-string)
+    const bigMatch = stripped.match(/\{[\s\S]*\}/);
+    if (bigMatch) { try { return JSON.parse(bigMatch[0]); } catch {} }
+    // Try each individual match
+    for (const m of allMatches) { try { return JSON.parse(m[0]); } catch {} }
+
+    // 4. Regex-extract individual fields as last-resort structural parse
+    const extractStr = (key: string) => { const m = raw.match(new RegExp(`"${key}"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)"`)); return m?.[1]; };
+    const extractNum = (key: string) => { const m = raw.match(new RegExp(`"${key}"\\s*:\\s*([\\d.]+)`)); return m ? parseFloat(m[1]) : undefined; };
+    const crop = extractStr("crop") ?? extractStr("recommended_crop");
+    const advice = extractStr("advice") ?? extractStr("summary");
+    if (crop || advice) {
+      return {
+        crop,
+        advice: advice ?? undefined,
+        confidence: extractNum("confidence"),
+      } as Parsed;
+    }
+
+    // 5. Last resort — show text as advice
     return { advice: raw };
   })();
 
-  // 5. If advice itself looks like a JSON blob (double-encoded), try to re-parse it
+  // 6. If advice itself looks like a JSON blob (double-encoded), try to re-parse it
   if (parsed.advice && typeof parsed.advice === "string" && parsed.advice.trimStart().startsWith("{")) {
     try {
       const inner = JSON.parse(parsed.advice) as Parsed;
       if (inner.crop || inner.tasks || inner.impact) Object.assign(parsed, inner);
     } catch {}
   }
+
+  // 7. If crop is still missing but advice text contains crop name clue, extract it
+  if (!parsed.crop && parsed.advice && typeof parsed.advice === "string") {
+    const m = parsed.advice.match(/\b([A-Z][a-z]+(?: [A-Z][a-z]+)?)\b/);
+    // Very rough — only use if looks like a proper noun (capitalised) in a short prefix
+  }
+
   const usedFallback = !!rec
     && !parsed.advice && !parsed.crop && !(parsed.tasks?.length) && !parsed.impact;
   const view: Parsed = parsed;
   const noStructured = usedFallback;
+
+  // Detect a partial/truncated result: crop or advice present, but impact & tasks missing.
+  // This happens when the cached JSON was truncated. Automatically trigger a fresh live
+  // call once so the user always sees the full plan without needing to click anything.
+  const isPartialResult = !!rec && !busy
+    && (!!view.crop || !!view.advice)
+    && !view.impact && !(view.tasks?.length);
+
+  const autoRefreshFiredRef = useRef(false);
+  useEffect(() => {
+    if (isPartialResult && !autoRefreshFiredRef.current) {
+      autoRefreshFiredRef.current = true;
+      // Small delay so the user briefly sees the partial result before re-fetching
+      setTimeout(() => ask({ forceLive: true }), 800);
+    }
+    // Reset flag when rec changes (new farm / new plan)
+    if (!rec) autoRefreshFiredRef.current = false;
+  }, [isPartialResult, rec?.id]); // eslint-disable-line
   const latencyMs = tStart && tEnd ? Math.round(tEnd - tStart) : null;
   const conf = view.confidence ?? (rec?.evalScore ?? rec?.confidenceScore ?? 0);
   return (
@@ -219,8 +283,7 @@ export default function AgentPanel({
               {busy
                 ? <span className="flex items-center gap-2"><Spinner /> Planning… <span className="tabular-nums text-emerald-200/70">{liveElapsed}s</span></span>
                 : <>▶ Plan my season</>}
-            </button>
-            <button
+            </button>            <button
               onClick={() => ask({ forceLive: true })}
               disabled={busy}
               title="Skip the result cache and force a fresh Gemini call"
@@ -236,9 +299,25 @@ export default function AgentPanel({
             <p className="whitespace-pre-wrap break-words leading-relaxed">{error}</p>
           </div>
         )}
+        {/* Progress bar while Gemini is thinking */}
+        {busy && (
+          <div className="mt-3 space-y-1.5">
+            <div className="flex items-center justify-between text-[11px] text-slate-400">
+              <span>🤖 Gemini is analysing weather, soil &amp; market data…</span>
+              <span className="tabular-nums text-emerald-300 font-semibold">{liveElapsed}s</span>
+            </div>
+            <div className="h-1 w-full rounded-full bg-white/[0.06] overflow-hidden">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-cyan-400 transition-all duration-1000"
+                style={{ width: `${Math.min(95, (liveElapsed / 35) * 100)}%` }}
+              />
+            </div>
+            <p className="text-[10px] text-slate-500">Typically 25–35 s · result will appear automatically when ready</p>
+          </div>
+        )}
       </div>
       {(busy || rec || error) && (
-        <div className="grid lg:grid-cols-[300px_1fr] gap-5 items-start">
+        <div ref={resultRef} className="grid lg:grid-cols-[300px_1fr] gap-5 items-start">
           <div className="space-y-4">
             <AgentTrace running={busy} finished={!!rec} errored={!!error} evalPending={evalPending} evalDone={!evalPending && !!rec && rec.evalScore != null} />
             {farm && <FarmMap lat={farm.latitude} lon={farm.longitude} />}
@@ -348,7 +427,7 @@ function ArizePanel({ arize, traceId, modelServed, evalScore, evalDetails, evalJ
   const tid       = arize?.traceId || traceId || "";
   const spanCount = arize?.spansExported ?? 10;
 
-  const arizeSpaceId = arizeStatus?.spaceIdHint ?? process.env.NEXT_PUBLIC_ARIZE_SPACE_ID    ?? "";
+  const arizeSpaceId = arizeStatus?.arizeOrgId     ?? arizeStatus?.spaceIdHint ?? process.env.NEXT_PUBLIC_ARIZE_SPACE_ID    ?? "";
   const arizeProject = arizeStatus?.projectName ?? process.env.NEXT_PUBLIC_ARIZE_PROJECT_NAME ?? "agriguardian-ai";
   const arizeBase    = arizeSpaceId ? `https://app.arize.com/organizations/${arizeSpaceId}` : "https://app.arize.com";
   const arizeUrl     = `${arizeBase}/projects/${arizeProject}/traces`;
@@ -611,33 +690,57 @@ function ResultCard({
       {/* ══════════════════════════════════════════════
           MAIN RESULT CARD  (matches Cluster Bean layout)
           ══════════════════════════════════════════════ */}
-      <div className="card p-5 space-y-4">
+      <div className="card overflow-hidden">
 
-        {/* ① Header: "Result" title + crop name + confidence ring */}
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex-1 min-w-0">
-            <div className="text-[18px] font-bold text-slate-100 leading-none mb-1">Result</div>
-            <div className="text-[13px] font-bold text-emerald-400 uppercase tracking-wide truncate">
-              Recommended Crop · {view.crop ?? "—"}
+        {/* ① Hero crop banner — dark green gradient with big crop name */}
+        <div className={`relative px-5 py-5 ${isOffline ? "bg-amber-900/20" : "bg-gradient-to-br from-emerald-900/60 via-emerald-900/30 to-transparent"}`}>
+          {/* "Result" eyebrow */}
+          <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-400/70 mb-1">Result</div>
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex-1 min-w-0">
+              {/* Crop name — big and bold */}
+              <div className="text-[11px] uppercase tracking-[0.14em] text-slate-400 font-semibold mb-0.5">
+                Recommended Crop
+              </div>
+              <div className="text-3xl font-black text-slate-100 leading-tight truncate">
+                {view.crop
+                  ? <><span className="mr-2">🌱</span>{view.crop}</>
+                  : <span className="text-slate-500 text-xl font-semibold italic">Analysing…</span>
+                }
+              </div>
+              {/* Status chip + season/soil chips from basis */}
+              <div className="mt-2.5 flex items-center gap-2 flex-wrap">
+                {isOffline ? (
+                  <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-amber-400 uppercase tracking-wider">
+                    <span className="h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse" />Offline · Fallback
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-emerald-400 uppercase tracking-wider">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />Live · Gemini 3
+                  </span>
+                )}
+                {view._basis?.season && (
+                  <span className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-400/15 border border-emerald-400/20 text-emerald-300 font-medium">
+                    {view._basis.season}
+                  </span>
+                )}
+                {view._basis?.soil && (
+                  <span className="text-[11px] px-2 py-0.5 rounded-full bg-slate-400/10 border border-white/10 text-slate-300 font-medium">
+                    {view._basis.soil} soil
+                  </span>
+                )}
+                {view._basis?.rain7dMm != null && (
+                  <span className="text-[11px] px-2 py-0.5 rounded-full bg-blue-400/10 border border-blue-400/20 text-blue-300 font-medium">
+                    💧 {Math.round(view._basis.rain7dMm)}mm rain (7d)
+                  </span>
+                )}
+              </div>
             </div>
-            <div className="mt-2 flex items-center gap-2 flex-wrap">
-              {isOffline ? (
-                <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-amber-400 uppercase tracking-wider">
-                  <span className="h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse" />Offline · Fallback
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-emerald-400 uppercase tracking-wider">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />Live · Gemini
-                </span>
-              )}
-              {noStructured && (
-                <span className="text-[10px] text-amber-300/70 font-semibold uppercase tracking-wider">· Unstructured</span>
-              )}
-            </div>
+            <ConfidenceRing value={conf} />
           </div>
-          <ConfidenceRing value={conf} />
         </div>
 
+        <div className="p-5 space-y-4">
         {/* ② Metric tiles: Latency / Model / Spans */}
         <div className="grid grid-cols-3 gap-2">
           <Metric k="Latency"  v={latencyMs ? `${latencyMs}ms` : "—"} />
@@ -667,10 +770,10 @@ function ResultCard({
             </div>
             {/* 4-cell grid */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              <BasisCell k="Season"      v={view._basis.season ?? "—"} />
-              <BasisCell k="Soil"        v={`${view._basis.soil ?? "?"}${view._basis.soilSource === "farm-record" ? " (your farm)" : " (geo)"}`} />
-              <BasisCell k="Coordinates" v={view._basis.latitude != null ? `${view._basis.latitude.toFixed(3)}, ${view._basis.longitude?.toFixed(3)}` : "—"} />
-              <BasisCell k="Rain (7d)"   v={view._basis.rain7dMm != null ? `${Math.round(view._basis.rain7dMm)} mm` : "—"} />
+              <BasisCell k="Date (IST)"   v={view._basis.date ?? new Date().toISOString().slice(0,10)} />
+              <BasisCell k="Season"       v={view._basis.season ?? "—"} />
+              <BasisCell k="Soil"         v={`${view._basis.soil ?? "?"}${view._basis.soilSource === "farm-record" ? " (your farm)" : " (geo)"}`} />
+              <BasisCell k="Rain (7d)"    v={view._basis.rain7dMm != null ? `${Math.round(view._basis.rain7dMm)} mm` : "—"} />
             </div>
             {/* Location anchor */}
             {view._basis.anchorCrop && (
@@ -711,8 +814,26 @@ function ResultCard({
             )}
           </div>
         )}
+        </div>{/* end p-5 space-y-4 */}
       </div>
       {/* ══ END MAIN RESULT CARD ══ */}
+
+      {/* ── When backend returned something but we couldn't parse structured fields ── */}
+      {noStructured && rec?.reasoning && (
+        <div className="card px-5 py-4 border-amber-400/20">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-lg">⚠️</span>
+            <h4 className="text-[13px] font-semibold text-amber-200">Response received — unstructured format</h4>
+            <button onClick={() => onAsk({ forceLive: true })} disabled={busy}
+              className="ml-auto text-[11px] px-3 py-1 rounded border border-amber-300/30 text-amber-200 hover:bg-amber-300/10 disabled:opacity-50">
+              ⟳ Retry
+            </button>
+          </div>
+          <pre className="text-[11px] text-slate-400 leading-relaxed whitespace-pre-wrap break-words max-h-40 overflow-y-auto">
+            {rec.reasoning.slice(0, 600)}{rec.reasoning.length > 600 ? "…" : ""}
+          </pre>
+        </div>
+      )}
 
       {/* ── Summary advice ── */}
       {view.advice && !view.advice.trimStart().startsWith("{") && (
