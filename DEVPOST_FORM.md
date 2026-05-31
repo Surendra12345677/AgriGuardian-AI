@@ -58,7 +58,7 @@ google-cloud-agent-builder, gemini-3, arize, arize-mcp, mongodb, mongodb-mcp, sp
 
 | Devpost field | Value |
 |---|---|
-| Website / hosted demo | `https://agriguardian-web-963977203522.us-central1.run.app` |
+| Website / hosted demo | `https://agriguardian-web-zqafbkccaa-uc.a.run.app` |
 | GitHub repo | `https://github.com/Surendra12345677/AgriGuardian-AI` |
 | Video demo | `<paste your YouTube unlisted URL here>` |
 | Documentation | `https://github.com/Surendra12345677/AgriGuardian-AI/blob/main/SUBMISSION.md` |

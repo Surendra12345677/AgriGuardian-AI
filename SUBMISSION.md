@@ -6,7 +6,7 @@
 - **Event:** Google Cloud — *Building Agents for Real-World Challenges*
 - **Track / partner bucket:** 🟣 **Arize**
 - **Repo (public, MIT):** https://github.com/Surendra12345677/AgriGuardian-AI
-- **Hosted demo:** **https://agriguardian-web-963977203522.us-central1.run.app**
+- **Hosted demo:** **https://agriguardian-web-zqafbkccaa-uc.a.run.app**
 - **Backend API base:** https://agriguardian-ai-zqafbkccaa-uc.a.run.app/api/v1
 - **Backend health:** https://agriguardian-ai-zqafbkccaa-uc.a.run.app/actuator/health
 - **Demo video:** _YouTube unlisted URL goes here_

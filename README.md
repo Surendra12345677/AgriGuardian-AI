@@ -16,7 +16,7 @@
 **Languages:** 13 — English, Hindi, Marathi, Tamil, Telugu, Bengali, Punjabi · Spanish, French, German, Italian, Portuguese, Dutch
 **Status:** ✅ Live on Google Cloud Run
 **Submission:** [`SUBMISSION.md`](./SUBMISSION.md) · [`DEVPOST_FORM.md`](./DEVPOST_FORM.md) · [`docs/CLOUD_SHELL_REDEPLOY.md`](./docs/CLOUD_SHELL_REDEPLOY.md)
-**🌐 Live demo:** **https://agriguardian-web-963977203522.us-central1.run.app**
+**🌐 Live demo:** **https://agriguardian-web-zqafbkccaa-uc.a.run.app**
 **🔌 Backend API base:** https://agriguardian-ai-zqafbkccaa-uc.a.run.app/api/v1
 **❤️ Backend health:** https://agriguardian-ai-zqafbkccaa-uc.a.run.app/actuator/health
 **Demo video:** _add your unlisted YouTube/Vimeo URL here before final Devpost submission_
