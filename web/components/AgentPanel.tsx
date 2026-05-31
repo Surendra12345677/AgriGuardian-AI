@@ -324,6 +324,8 @@ function ConfidenceRing({ value }: { value: number }) {
 }
 
 // ─── Arize observability panel shown at the bottom of each result ────────────
+// Default: minimal strip showing monitoring status + eval score.
+// Click to expand the full detail view (flow, scorecard, metadata).
 function ArizePanel({ arize, traceId, modelServed, evalScore, evalDetails, evalJudge, evalPending }: {
   arize?: Parsed["arize"];
   traceId?: string;
@@ -346,20 +348,15 @@ function ArizePanel({ arize, traceId, modelServed, evalScore, evalDetails, evalJ
   const tid       = arize?.traceId || traceId || "";
   const spanCount = arize?.spansExported ?? 10;
 
-  // All env vars — nothing hardcoded, GCP-safe
   const arizeSpaceId = arizeStatus?.spaceIdHint ?? process.env.NEXT_PUBLIC_ARIZE_SPACE_ID    ?? "";
   const arizeProject = arizeStatus?.projectName ?? process.env.NEXT_PUBLIC_ARIZE_PROJECT_NAME ?? "agriguardian-ai";
   const arizeBase    = arizeSpaceId ? `https://app.arize.com/organizations/${arizeSpaceId}` : "https://app.arize.com";
   const arizeUrl     = `${arizeBase}/projects/${arizeProject}/traces`;
-
-  const isConnected = arizeStatus?.exporterEnabled ?? false;
+  const isConnected  = arizeStatus?.exporterEnabled ?? false;
 
   function copyTrace() {
     if (!tid) return;
-    navigator.clipboard.writeText(tid).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
+    navigator.clipboard.writeText(tid).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); });
   }
 
   const FLOW = [
@@ -369,108 +366,140 @@ function ArizePanel({ arize, traceId, modelServed, evalScore, evalDetails, evalJ
     { icon: "⚖️", label: "LLM judge",    desc: "4-dim score + replay" },
   ];
 
+  // Build compact score pill for the summary strip
+  const scorePill = evalPending && !evalDetails ? (
+    <span className="flex items-center gap-1 text-[10px] text-violet-300">
+      <span className="h-1.5 w-1.5 rounded-full bg-violet-400 animate-pulse" />scoring…
+    </span>
+  ) : evalScore != null ? (
+    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+      evalScore >= 0.75 ? "bg-emerald-400/15 text-emerald-300" : evalScore >= 0.6 ? "bg-cyan-400/15 text-cyan-300" : "bg-amber-400/15 text-amber-300"
+    }`}>
+      {evalScore >= 0.75 ? "✓ pass" : "⚠ review"} · {Math.round(evalScore * 100)}%
+    </span>
+  ) : null;
+
   return (
-    <div className="mt-2">
-      {/* ── Header bar ── */}
-      <div className="label mb-2 flex items-center gap-2 flex-wrap">
-        <span className="text-[12px] font-semibold text-slate-300">
-          Arize AX · Observability &amp; Evaluation
-        </span>
-        {arizeStatus != null ? (
-          isConnected ? (
-            <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-400/15 text-emerald-300 font-semibold uppercase tracking-wider animate-pulse">
-              live · connected
-            </span>
-          ) : (
-            <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-400/15 text-slate-400 font-semibold uppercase tracking-wider">
-              exporter disabled
-            </span>
-          )
-        ) : (
-          <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-400/15 text-emerald-300 font-semibold uppercase tracking-wider animate-pulse">
-            live
+    <details className="group mt-1">
+      {/* ── Minimal summary strip (default state) ── */}
+      <summary className="list-none cursor-pointer select-none">
+        <div className="flex items-center gap-2.5 rounded-xl border border-white/[0.07] bg-white/[0.02] hover:bg-white/[0.04] px-4 py-2.5 transition-colors flex-wrap">
+          {/* Arize badge */}
+          <span className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-400">
+            <span className="text-base leading-none">🔮</span>
+            <span>Arize AI</span>
           </span>
-        )}
-        <span className="text-[10px] px-1.5 py-0.5 rounded bg-violet-400/15 text-violet-300 font-semibold uppercase tracking-wider">MCP</span>
-        <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-400/15 text-blue-300 font-semibold uppercase tracking-wider">OTLP</span>
-        <a href={arizeUrl} target="_blank" rel="noreferrer"
-           className="ml-auto text-[11px] px-2.5 py-1 rounded-lg border border-violet-400/40 text-violet-200 hover:bg-violet-400/10 flex items-center gap-1">
-          View in Arize →
-        </a>
-      </div>
+          {/* Connection dot */}
+          {arizeStatus != null ? (
+            isConnected
+              ? <span className="flex items-center gap-1 text-[10px] text-emerald-400"><span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />live</span>
+              : <span className="text-[10px] text-slate-500">exporter off</span>
+          ) : (
+            <span className="flex items-center gap-1 text-[10px] text-emerald-400"><span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />live</span>
+          )}
+          <span className="text-slate-700 text-[10px]">·</span>
+          <span className="text-[10px] text-slate-500">{spanCount} spans · OTLP</span>
+          {/* Score pill */}
+          {scorePill && <>{scorePill}</>}
+          {/* Expand hint */}
+          <span className="ml-auto text-[10px] text-slate-600 group-open:hidden">
+            View Arize details ›
+          </span>
+          <span className="ml-auto text-[10px] text-slate-600 hidden group-open:inline">
+            ‹ Hide
+          </span>
+        </div>
+      </summary>
 
-      {/* ── Visual agent flow ── */}
-      <div className="flex items-center gap-1 mb-3 overflow-x-auto pb-1">
-        {FLOW.map((f, i) => (
-          <div key={i} className="flex items-center gap-1 flex-shrink-0">
-            <div className="rounded-lg border border-white/10 bg-white/[0.03] px-2.5 py-1.5 text-center min-w-[80px]">
-              <div className="text-base">{f.icon}</div>
-              <div className="text-[11px] text-slate-200 font-medium leading-tight">{f.label}</div>
-              <div className="text-[10px] text-slate-500 leading-tight">{f.desc}</div>
+      {/* ── Expanded detail view ── */}
+      <div className="mt-2 rounded-xl border border-white/[0.07] bg-white/[0.02] p-4 space-y-4">
+
+        {/* Header with badges + open-in-Arize link */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-[12px] font-semibold text-slate-300">Arize AX · Observability &amp; Evaluation</span>
+          {arizeStatus != null ? (
+            isConnected
+              ? <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-400/15 text-emerald-300 font-semibold uppercase tracking-wider animate-pulse">live · connected</span>
+              : <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-400/15 text-slate-400 font-semibold uppercase tracking-wider">exporter disabled</span>
+          ) : (
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-400/15 text-emerald-300 font-semibold uppercase tracking-wider animate-pulse">live</span>
+          )}
+          <span className="text-[10px] px-1.5 py-0.5 rounded bg-violet-400/15 text-violet-300 font-semibold uppercase tracking-wider">MCP</span>
+          <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-400/15 text-blue-300 font-semibold uppercase tracking-wider">OTLP</span>
+          <a href={arizeUrl} target="_blank" rel="noreferrer"
+             className="ml-auto text-[11px] px-2.5 py-1 rounded-lg border border-violet-400/40 text-violet-200 hover:bg-violet-400/10 flex items-center gap-1">
+            View in Arize →
+          </a>
+        </div>
+
+        {/* Visual agent flow */}
+        <div className="flex items-center gap-1 overflow-x-auto pb-1">
+          {FLOW.map((f, i) => (
+            <div key={i} className="flex items-center gap-1 flex-shrink-0">
+              <div className="rounded-lg border border-white/10 bg-white/[0.03] px-2.5 py-1.5 text-center min-w-[80px]">
+                <div className="text-base">{f.icon}</div>
+                <div className="text-[11px] text-slate-200 font-medium leading-tight">{f.label}</div>
+                <div className="text-[10px] text-slate-500 leading-tight">{f.desc}</div>
+              </div>
+              {i < FLOW.length - 1 && <span className="text-slate-600 text-xs flex-shrink-0">→</span>}
             </div>
-            {i < FLOW.length - 1 && <span className="text-slate-600 text-xs flex-shrink-0">→</span>}
-          </div>
-        ))}
-      </div>
-
-      {/* ── Inline LLM-judge eval scorecard ── */}
-      {evalPending && !evalDetails && (
-        <div className="mb-3 rounded-lg border border-violet-400/20 bg-violet-400/[0.04] px-3 py-2.5 flex items-center gap-2.5">
-          <span className="h-2 w-2 rounded-full bg-violet-400 animate-pulse flex-shrink-0" />
-          <div>
-            <span className="text-[11px] font-semibold text-violet-300">Arize LLM Judge evaluating…</span>
-            <p className="text-[10px] text-slate-400 mt-0.5">Gemini is scoring this plan on 4 quality dimensions. Results appear in ~10–15 s.</p>
-          </div>
+          ))}
         </div>
-      )}
-      {evalDetails && (
-        <div className="mb-3 rounded-lg border border-violet-400/20 bg-violet-400/[0.04] p-3">
-          <div className="flex items-center gap-2 mb-2 flex-wrap">
-            <span className="text-[11px] font-semibold text-violet-300">⚖️ LLM-as-Judge Eval</span>
-            {evalJudge && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded bg-violet-400/20 text-violet-200">{evalJudge}</span>
-            )}
-            {evalScore != null && (
-              <span className={`ml-auto text-[11px] font-bold px-2 py-0.5 rounded ${
-                evalScore >= 0.75 ? "text-emerald-300 bg-emerald-400/10" : evalScore >= 0.6 ? "text-cyan-300 bg-cyan-400/10" : "text-amber-300 bg-amber-400/10"
-              }`}>
-                {evalScore >= 0.75 ? "✓ pass" : "⚠ review"} · {evalScore.toFixed(3)}
-              </span>
-            )}
-          </div>
-          <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
-            {([
-              ["relevance",            "Relevance",    "Plan matches this farm"],
-              ["groundedness",         "Groundedness", "Numbers from real tool data"],
-              ["agronomicCorrectness", "Agronomic",    "Crop fit for soil + season"],
-              ["hallucinationRisk",    "Hallucination","1.0 = nothing fabricated"],
-            ] as [keyof NonNullable<Parsed["evalDetails"]>, string, string][]).map(([k, label, tip]) => {
-              const v = evalDetails[k] as number | undefined;
-              if (v == null) return null;
-              const p   = Math.round(v * 100);
-              const bar = v >= 0.8 ? "bg-emerald-400" : v >= 0.6 ? "bg-cyan-400" : "bg-amber-400";
-              const txt = v >= 0.8 ? "text-emerald-300" : v >= 0.6 ? "text-cyan-300" : "text-amber-300";
-              const ico = v >= 0.8 ? "✅" : v >= 0.6 ? "🟡" : "⚠️";
-              return (
-                <div key={k} title={tip}>
-                  <div className="flex items-center justify-between text-[10px] mb-0.5">
-                    <span className="text-slate-400 flex items-center gap-1"><span>{ico}</span>{label}</span>
-                    <span className={`font-bold ${txt}`}>{p}%</span>
-                  </div>
-                  <div className="h-1 w-full rounded-full bg-white/[0.05] overflow-hidden">
-                    <div className={`h-full rounded-full ${bar}`} style={{ width: `${p}%` }} />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
 
-      {/* ── Main info card ── */}
-      <div className="rounded-xl border border-emerald-400/25 bg-gradient-to-br from-emerald-400/[0.06] to-violet-400/[0.04] p-4 space-y-3 text-[13px]">
-        {/* What Arize does — plain English */}
-        <p className="text-[12px] text-slate-300 leading-relaxed border-b border-white/5 pb-3">
+        {/* LLM-judge eval scorecard */}
+        {evalPending && !evalDetails && (
+          <div className="rounded-lg border border-violet-400/20 bg-violet-400/[0.04] px-3 py-2.5 flex items-center gap-2.5">
+            <span className="h-2 w-2 rounded-full bg-violet-400 animate-pulse flex-shrink-0" />
+            <div>
+              <span className="text-[11px] font-semibold text-violet-300">Arize LLM Judge evaluating…</span>
+              <p className="text-[10px] text-slate-400 mt-0.5">Gemini is scoring this plan on 4 quality dimensions. Results appear in ~10–15 s.</p>
+            </div>
+          </div>
+        )}
+        {evalDetails && (
+          <div className="rounded-lg border border-violet-400/20 bg-violet-400/[0.04] p-3">
+            <div className="flex items-center gap-2 mb-2 flex-wrap">
+              <span className="text-[11px] font-semibold text-violet-300">⚖️ LLM-as-Judge Eval</span>
+              {evalJudge && <span className="text-[10px] px-1.5 py-0.5 rounded bg-violet-400/20 text-violet-200">{evalJudge}</span>}
+              {evalScore != null && (
+                <span className={`ml-auto text-[11px] font-bold px-2 py-0.5 rounded ${
+                  evalScore >= 0.75 ? "text-emerald-300 bg-emerald-400/10" : evalScore >= 0.6 ? "text-cyan-300 bg-cyan-400/10" : "text-amber-300 bg-amber-400/10"
+                }`}>
+                  {evalScore >= 0.75 ? "✓ pass" : "⚠ review"} · {evalScore.toFixed(3)}
+                </span>
+              )}
+            </div>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
+              {([
+                ["relevance",            "Relevance",    "Plan matches this farm"],
+                ["groundedness",         "Groundedness", "Numbers from real tool data"],
+                ["agronomicCorrectness", "Agronomic",    "Crop fit for soil + season"],
+                ["hallucinationRisk",    "Hallucination","1.0 = nothing fabricated"],
+              ] as [keyof NonNullable<Parsed["evalDetails"]>, string, string][]).map(([k, label, tip]) => {
+                const v = evalDetails[k] as number | undefined;
+                if (v == null) return null;
+                const p   = Math.round(v * 100);
+                const bar = v >= 0.8 ? "bg-emerald-400" : v >= 0.6 ? "bg-cyan-400" : "bg-amber-400";
+                const txt = v >= 0.8 ? "text-emerald-300" : v >= 0.6 ? "text-cyan-300" : "text-amber-300";
+                const ico = v >= 0.8 ? "✅" : v >= 0.6 ? "🟡" : "⚠️";
+                return (
+                  <div key={k} title={tip}>
+                    <div className="flex items-center justify-between text-[10px] mb-0.5">
+                      <span className="text-slate-400 flex items-center gap-1"><span>{ico}</span>{label}</span>
+                      <span className={`font-bold ${txt}`}>{p}%</span>
+                    </div>
+                    <div className="h-1 w-full rounded-full bg-white/[0.05] overflow-hidden">
+                      <div className={`h-full rounded-full ${bar}`} style={{ width: `${p}%` }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* What Arize does */}
+        <p className="text-[12px] text-slate-300 leading-relaxed">
           <span className="font-semibold text-emerald-300">What Arize does: </span>
           Every step this agent runs — from fetching weather to Gemini reasoning — emits an{" "}
           <span className="text-blue-300 font-medium">OpenTelemetry span</span> shipped in real time to Arize AX.
@@ -478,20 +507,22 @@ function ArizePanel({ arize, traceId, modelServed, evalScore, evalDetails, evalJ
         </p>
 
         {/* Metadata table */}
-        <div className="grid sm:grid-cols-2 gap-x-6 gap-y-2">
-          <ArizeRow label="MCP operation"   value={arize?.operation || "search_traces"}          color="text-emerald-200" />
-          <ArizeRow label="Project"         value={arizeProject}                                  color="text-slate-100"  />
-          <ArizeRow label="Spans exported"  value={`${spanCount} (9 agent + 1 eval)`}             color="text-slate-100"  />
-          <ArizeRow label="Reasoning model" value={modelServed || "gemini-3.1-pro-preview"}       color="text-violet-200" />
-          <ArizeRow label="Exporter"        value={isConnected ? "OTLP → Arize AX ✓" : arizeStatus ? "disabled (set ARIZE_ENABLED=true)" : "OTLP → Arize AX"}
-                    color={isConnected ? "text-emerald-200" : "text-slate-400"} />
-          <ArizeRow label="MCP"             value={arizeStatus?.mcpEnabled ? "connected" : "disabled (set MCP_ARIZE_ENABLED=true)"}
-                    color={arizeStatus?.mcpEnabled ? "text-emerald-200" : "text-slate-400"} />
+        <div className="grid sm:grid-cols-2 gap-x-6 gap-y-2 text-[13px]">
+          <ArizeRow label="MCP operation"   value={arize?.operation || "search_traces"}    color="text-emerald-200" />
+          <ArizeRow label="Project"         value={arizeProject}                            color="text-slate-100"  />
+          <ArizeRow label="Spans exported"  value={`${spanCount} (9 agent + 1 eval)`}       color="text-slate-100"  />
+          <ArizeRow label="Reasoning model" value={modelServed || "gemini-3.1-pro-preview"} color="text-violet-200" />
+          <ArizeRow label="Exporter"
+            value={isConnected ? "OTLP → Arize AX ✓" : arizeStatus ? "disabled (set ARIZE_ENABLED=true)" : "OTLP → Arize AX"}
+            color={isConnected ? "text-emerald-200" : "text-slate-400"} />
+          <ArizeRow label="MCP"
+            value={arizeStatus?.mcpEnabled ? "connected" : "disabled (set MCP_ARIZE_ENABLED=true)"}
+            color={arizeStatus?.mcpEnabled ? "text-emerald-200" : "text-slate-400"} />
           {tid && (
             <div className="sm:col-span-2 flex justify-between gap-2 items-center">
               <span className="text-slate-400 text-[12px]">Trace ID</span>
               <div className="flex items-center gap-1.5 min-w-0">
-                <code className="text-[11px] text-violet-300 font-mono truncate max-w-[200px]" title={tid}>{tid}</code>
+                <code className="text-[11px] text-violet-300 font-mono truncate max-w-[220px]" title={tid}>{tid}</code>
                 <button type="button" onClick={copyTrace}
                   className="shrink-0 text-[10px] px-1.5 py-0.5 rounded border border-violet-400/20 text-violet-300 hover:bg-violet-400/10 transition">
                   {copied ? "✓ Copied" : "Copy"}
@@ -502,13 +533,13 @@ function ArizePanel({ arize, traceId, modelServed, evalScore, evalDetails, evalJ
         </div>
 
         {arize?.note && (
-          <p className="pt-2 mt-1 border-t border-emerald-400/15 text-slate-300 leading-relaxed text-[12px]">{arize.note}</p>
+          <p className="border-t border-white/5 pt-3 text-slate-300 leading-relaxed text-[12px]">{arize.note}</p>
         )}
 
         {/* What judges can do */}
-        <div className="rounded-lg border border-violet-400/15 bg-violet-400/[0.04] px-3 py-2 text-[11px] text-slate-300 space-y-1">
-          <div className="font-semibold text-violet-300 mb-1">What judges can do in Arize AX:</div>
-          <div className="grid sm:grid-cols-2 gap-x-4 gap-y-0.5">
+        <div className="rounded-lg border border-violet-400/15 bg-violet-400/[0.04] px-3 py-2.5 text-[11px] text-slate-300">
+          <div className="font-semibold text-violet-300 mb-1.5">What judges can do in Arize AX:</div>
+          <div className="grid sm:grid-cols-2 gap-x-4 gap-y-1">
             {[
               ["🔍 Trace replay",    "See every tool call, its input/output & latency"],
               ["⚖️ LLM evals",       "Auto-score on hallucination, relevance, groundedness"],
@@ -523,7 +554,7 @@ function ArizePanel({ arize, traceId, modelServed, evalScore, evalDetails, evalJ
           </div>
         </div>
       </div>
-    </div>
+    </details>
   );
 }
 
@@ -760,7 +791,7 @@ function ResultCard({
         </details>
       )}
 
-      {/* ── Arize observability (compact, at bottom) ── */}
+      {/* ── Arize observability (collapsed strip, expands on click) ── */}
       <ArizePanel
         arize={view.arize}
         traceId={rec.traceId}
