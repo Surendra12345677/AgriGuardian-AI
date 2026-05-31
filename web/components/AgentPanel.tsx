@@ -587,35 +587,19 @@ function ResultCard({
   onSetCrop: (c: string) => void;
 }) {
   const isOffline = view._source === "offline-fallback";
+  const model = view._modelServed ?? "gemini-3.1-pro-preview";
+  const spanCount = view.arize?.spansExported ?? 9;
 
   return (
-    <div className="space-y-4">
-
-      {/* ── "Result" section header ── */}
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div className="flex items-center gap-2">
-          <div className="h-px w-5 bg-emerald-400/50" />
-          <span className="text-[10px] uppercase tracking-[0.2em] text-emerald-300/80 font-semibold">Result</span>
-        </div>
-        <div className="flex items-center gap-2 text-[11px] text-slate-500 font-mono">
-          {latencyMs && (
-            <span className="bg-white/[0.03] border border-white/[0.06] px-2.5 py-0.5 rounded-full">
-              {latencyMs}ms
-            </span>
-          )}
-          <span className="bg-white/[0.03] border border-white/[0.06] px-2.5 py-0.5 rounded-full">
-            {view._modelServed ?? "gemini-3.1-pro-preview"}
-          </span>
-        </div>
-      </div>
+    <div className="space-y-3">
 
       {/* ── Offline quota notice ── */}
       {isOffline && view._reason?.includes("quota") && (
         <div className="rounded-xl border border-amber-400/30 bg-amber-400/[0.05] px-5 py-4 text-sm text-amber-200">
           <div className="font-semibold text-amber-300 mb-1">⚠ Gemini quota reached — billing fix needed</div>
           <p className="text-[12px] leading-relaxed">
-            Visit <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer" className="underline text-amber-100">aistudio.google.com/apikey</a>{" "}
-            → Set up billing → link GCP billing account. No code changes needed.
+            Visit <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer" className="underline text-amber-100">aistudio.google.com/apikey</a>
+            {" "}→ Set up billing → link GCP billing account. No code changes needed.
           </p>
           <button onClick={() => onAsk({ forceLive: true })} disabled={busy}
             className="mt-2 text-[11px] px-3 py-1 rounded border border-amber-300/40 text-amber-200 hover:bg-amber-300/10 disabled:opacity-50">
@@ -624,132 +608,129 @@ function ResultCard({
         </div>
       )}
 
-      {/* ── Hero: recommended crop — MAIN FOCUS ── */}
-      {view.crop ? (
-        <div className="rounded-2xl overflow-hidden border border-white/[0.07] shadow-xl shadow-emerald-900/10">
-          {/* Gradient header */}
-          <div className="bg-gradient-to-br from-emerald-900/70 via-emerald-950/50 to-slate-900/80 px-6 py-7">
-            {/* Status + latency chips in top row */}
-            <div className="flex items-center gap-2 mb-4 flex-wrap">
+      {/* ══════════════════════════════════════════════
+          MAIN RESULT CARD  (matches Cluster Bean layout)
+          ══════════════════════════════════════════════ */}
+      <div className="card p-5 space-y-4">
+
+        {/* ① Header: "Result" title + crop name + confidence ring */}
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex-1 min-w-0">
+            <div className="text-[18px] font-bold text-slate-100 leading-none mb-1">Result</div>
+            <div className="text-[13px] font-bold text-emerald-400 uppercase tracking-wide truncate">
+              Recommended Crop · {view.crop ?? "—"}
+            </div>
+            <div className="mt-2 flex items-center gap-2 flex-wrap">
               {isOffline ? (
-                <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-amber-300 uppercase tracking-wider">
-                  <span className="h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse" />Offline fallback
+                <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-amber-400 uppercase tracking-wider">
+                  <span className="h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse" />Offline · Fallback
                 </span>
               ) : (
-                <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-emerald-400 uppercase tracking-wider">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />Live · Gemini 3
+                <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-emerald-400 uppercase tracking-wider">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />Live · Gemini
                 </span>
               )}
-              {noStructured && <span className="text-[10px] text-amber-300/70 font-semibold uppercase tracking-wider">· Unstructured</span>}
-              {latencyMs && (
-                <span className="ml-auto text-[10px] text-slate-500 font-mono bg-white/[0.04] px-2 py-0.5 rounded-full border border-white/[0.06]">
-                  {latencyMs}ms
-                </span>
+              {noStructured && (
+                <span className="text-[10px] text-amber-300/70 font-semibold uppercase tracking-wider">· Unstructured</span>
               )}
-              <span className="text-[10px] text-slate-600 font-mono">{view._modelServed ?? "gemini-3.1-pro-preview"}</span>
-            </div>
-
-            {/* Crop name + ring */}
-            <div className="flex items-start justify-between gap-4">
-              <div className="flex-1 min-w-0">
-                <div className="text-[10px] uppercase tracking-[0.25em] text-emerald-400/60 font-semibold mb-2">
-                  Recommended Crop
-                </div>
-                <div className="text-5xl font-black text-white capitalize tracking-tight leading-none flex items-center gap-3 flex-wrap">
-                  <span>🌱</span>
-                  <span>{view.crop}</span>
-                </div>
-                {view._basis?.season && (
-                  <div className="mt-3 flex items-center gap-2 flex-wrap">
-                    <span className="text-[11px] px-2.5 py-1 rounded-full border border-emerald-400/35 bg-emerald-400/10 text-emerald-300 font-medium">
-                      {view._basis.season} season
-                    </span>
-                    {view._basis.soil && (
-                      <span className="text-[11px] px-2.5 py-1 rounded-full border border-white/15 bg-white/[0.05] text-slate-300">
-                        {view._basis.soil} soil
-                      </span>
-                    )}
-                    {view._basis.rain7dMm != null && (
-                      <span className="text-[11px] px-2.5 py-1 rounded-full border border-blue-400/25 bg-blue-400/[0.07] text-blue-300">
-                        🌧 {Math.round(view._basis.rain7dMm)}mm rain (7d)
-                      </span>
-                    )}
-                  </div>
-                )}
-              </div>
-              <ConfidenceRing value={conf} />
             </div>
           </div>
-
-          {/* Shortlist pills */}
-          {Array.isArray(view._basis?.shortlist) && view._basis!.shortlist.length > 0 && (
-            <div className="bg-white/[0.02] px-6 py-4 border-t border-white/[0.05]">
-              <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-2.5">Other suitable crops for this location</div>
-              <div className="flex flex-wrap gap-2">
-                {view._basis!.shortlist.map((c, i) => {
-                  const picked = view.crop && c.toLowerCase() === view.crop.toLowerCase();
-                  return (
-                    <button key={i} type="button" disabled={busy || !!picked}
-                      onClick={() => onAsk({ cropOverride: c })}
-                      className={"px-3.5 py-1.5 rounded-full text-[12px] border transition-all font-medium " + (
-                        picked
-                          ? "border-emerald-400/60 bg-emerald-400/15 text-emerald-200 cursor-default"
-                          : "border-white/10 bg-white/[0.03] text-slate-300 hover:border-emerald-400/40 hover:text-emerald-200 disabled:opacity-40"
-                      )}>
-                      {c}{picked ? " ✓" : ""}
-                    </button>
-                  );
-                })}
-                <button type="button" disabled={busy}
-                  onClick={() => { onSetCrop(""); onAsk({ forceLive: true }); }}
-                  className="px-3.5 py-1.5 rounded-full text-[12px] border border-slate-400/20 bg-white/[0.03] text-slate-400 hover:text-slate-200 hover:border-slate-400/40 disabled:opacity-40">
-                  🔁 Re-plan
-                </button>
-              </div>
-            </div>
-          )}
+          <ConfidenceRing value={conf} />
         </div>
-      ) : (
-        /* No crop parsed yet but we have a rec — show status bar */
-        <div className="rounded-2xl border border-white/[0.07] bg-white/[0.02] px-5 py-3 flex items-center justify-between gap-3 flex-wrap">
-          <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-emerald-300 uppercase tracking-wider">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />{isOffline ? "Offline fallback" : "Live · Gemini 3"}
-          </span>
-          <div className="flex items-center gap-3 text-[11px] text-slate-500 font-mono">
-            {latencyMs && <span>{latencyMs}ms</span>}
-            <span>{view._modelServed ?? "gemini-3.1-pro-preview"}</span>
+
+        {/* ② Metric tiles: Latency / Model / Spans */}
+        <div className="grid grid-cols-3 gap-2">
+          <Metric k="Latency"  v={latencyMs ? `${latencyMs}ms` : "—"} />
+          <Metric k="Model"    v={model} />
+          <Metric k="Spans"    v={`${spanCount}`} />
+        </div>
+
+        {/* ③ Projected Impact */}
+        {view.impact && (
+          <div>
+            <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500 font-semibold mb-2">Projected Impact</div>
+            <ImpactDashboard impact={view.impact} />
           </div>
-        </div>
-      )}
+        )}
 
-      {/* ── Summary advice — prominent ── */}
+        {/* ④ Why this crop · Location basis — always expanded */}
+        {view._basis && (
+          <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-4 space-y-3">
+            {/* Section header */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-[10px] uppercase tracking-[0.18em] text-slate-400 font-semibold">
+                Why this crop · Location basis
+              </span>
+              <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-400/15 text-emerald-300 font-bold uppercase tracking-wider">
+                Farm-Aware
+              </span>
+            </div>
+            {/* 4-cell grid */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              <BasisCell k="Season"      v={view._basis.season ?? "—"} />
+              <BasisCell k="Soil"        v={`${view._basis.soil ?? "?"}${view._basis.soilSource === "farm-record" ? " (your farm)" : " (geo)"}`} />
+              <BasisCell k="Coordinates" v={view._basis.latitude != null ? `${view._basis.latitude.toFixed(3)}, ${view._basis.longitude?.toFixed(3)}` : "—"} />
+              <BasisCell k="Rain (7d)"   v={view._basis.rain7dMm != null ? `${Math.round(view._basis.rain7dMm)} mm` : "—"} />
+            </div>
+            {/* Location anchor */}
+            {view._basis.anchorCrop && (
+              <p className="text-[11px] text-emerald-400/90 leading-relaxed">
+                <span className="font-semibold text-emerald-300">Location Anchor</span>
+                {" — "}derived deterministically from this farm&apos;s lat/lon so two different addresses always produce different recommendations:{" "}
+                <span className="font-mono text-emerald-200">{view._basis.anchorCrop}</span>
+              </p>
+            )}
+            {/* Candidate shortlist */}
+            {Array.isArray(view._basis.shortlist) && view._basis.shortlist.length > 0 && (
+              <div>
+                <div className="text-[10px] uppercase tracking-[0.15em] text-slate-500 font-semibold mb-2">
+                  Candidate shortlist for this location · click any to re-plan
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {view._basis.shortlist.map((c, i) => {
+                    const picked = view.crop && c.toLowerCase() === view.crop.toLowerCase();
+                    return (
+                      <button key={i} type="button" disabled={busy || !!picked}
+                        onClick={() => onAsk({ cropOverride: c })}
+                        className={"px-3 py-1 rounded-full text-[12px] border transition-all font-medium " + (
+                          picked
+                            ? "border-emerald-400/60 bg-emerald-400/15 text-emerald-200 cursor-default"
+                            : "border-white/10 bg-white/[0.03] text-slate-300 hover:border-emerald-400/40 hover:text-emerald-200 disabled:opacity-40"
+                        )}>
+                        {c}{picked ? " ✓" : ""}
+                      </button>
+                    );
+                  })}
+                  <button type="button" disabled={busy}
+                    onClick={() => { onSetCrop(""); onAsk({ forceLive: true }); }}
+                    className="px-3 py-1 rounded-full text-[12px] border border-slate-400/20 bg-white/[0.03] text-slate-400 hover:text-slate-200 hover:border-slate-400/40 disabled:opacity-40">
+                    🔁 Re-plan
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+      {/* ══ END MAIN RESULT CARD ══ */}
+
+      {/* ── Summary advice ── */}
       {view.advice && !view.advice.trimStart().startsWith("{") && (
-        <div className="rounded-2xl border border-white/[0.07] bg-white/[0.02] px-6 py-5">
-          <div className="flex items-center gap-2.5 mb-4">
-            <span className="text-xl">💡</span>
-            <h4 className="text-[15px] font-bold text-slate-100">Why this plan works for your farm</h4>
+        <div className="card px-5 py-4">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-lg">💡</span>
+            <h4 className="text-[14px] font-semibold text-slate-100">Why this plan works for your farm</h4>
           </div>
-          <p className="text-[14px] text-slate-200 leading-8 pl-4 border-l-2 border-emerald-400/40">{view.advice}</p>
-        </div>
-      )}
-
-      {/* ── Impact numbers ── */}
-      {view.impact && (
-        <div className="rounded-2xl border border-white/[0.07] bg-white/[0.02] px-6 py-5">
-          <div className="flex items-center gap-2.5 mb-4">
-            <span className="text-xl">📊</span>
-            <h4 className="text-[15px] font-bold text-slate-100">Projected impact</h4>
-          </div>
-          <ImpactDashboard impact={view.impact} />
+          <p className="text-[13px] text-slate-300 leading-7 pl-3 border-l-2 border-emerald-400/30">{view.advice}</p>
         </div>
       )}
 
       {/* ── Task timeline ── */}
       {Array.isArray(view.tasks) && view.tasks.length > 0 && (
-        <div className="rounded-2xl border border-white/[0.07] bg-white/[0.02] px-6 py-5">
-          <div className="flex items-center gap-2.5 mb-5">
-            <span className="text-xl">📋</span>
-            <h4 className="text-[15px] font-bold text-slate-100">Your action plan</h4>
+        <div className="card px-5 py-4">
+          <div className="flex items-center gap-2 mb-4">
+            <span className="text-lg">📋</span>
+            <h4 className="text-[14px] font-semibold text-slate-100">Your action plan</h4>
             <span className="ml-auto text-[11px] text-slate-500 bg-white/[0.04] border border-white/10 px-2.5 py-0.5 rounded-full">
               {view.tasks.length} steps
             </span>
@@ -760,22 +741,22 @@ function ResultCard({
               const why    = typeof t === "string" ? "" : (t.why ?? "");
               const day    = typeof t === "string" ? null : (t.day ?? null);
               return (
-                <div key={i} className="flex gap-4">
+                <div key={i} className="flex gap-3">
                   <div className="shrink-0 flex flex-col items-center">
-                    <div className="h-8 w-8 rounded-full bg-emerald-400/15 border border-emerald-400/30 flex items-center justify-center text-[11px] font-bold text-emerald-300 mt-0.5">
+                    <div className="h-7 w-7 rounded-full bg-emerald-400/15 border border-emerald-400/30 flex items-center justify-center text-[11px] font-bold text-emerald-300 mt-0.5">
                       {day ?? (i + 1)}
                     </div>
                     {i < view.tasks!.length - 1 && (
-                      <div className="w-px flex-1 bg-emerald-400/[0.12] mt-1 min-h-[18px]" />
+                      <div className="w-px flex-1 bg-emerald-400/[0.12] mt-1 min-h-[16px]" />
                     )}
                   </div>
-                  <div className="pb-4 flex-1 min-w-0">
+                  <div className="pb-3 flex-1 min-w-0">
                     {day != null && (
-                      <div className="text-[10px] text-emerald-400/60 font-semibold uppercase tracking-widest mb-1">Day {day}</div>
+                      <div className="text-[10px] text-emerald-400/60 font-semibold uppercase tracking-widest mb-0.5">Day {day}</div>
                     )}
-                    <div className="text-[14px] font-semibold text-slate-100 leading-snug">{action}</div>
+                    <div className="text-[13px] font-semibold text-slate-100 leading-snug">{action}</div>
                     {why && (
-                      <div className="mt-2 text-[12.5px] text-slate-400 leading-relaxed border-l-2 border-emerald-400/20 pl-3">{why}</div>
+                      <div className="mt-1.5 text-[12px] text-slate-400 leading-relaxed border-l-2 border-emerald-400/20 pl-3">{why}</div>
                     )}
                   </div>
                 </div>
@@ -787,42 +768,23 @@ function ResultCard({
 
       {/* ── Risks ── */}
       {Array.isArray(view.risks) && view.risks.length > 0 && (
-        <div className="rounded-2xl border border-white/[0.07] bg-white/[0.02] px-6 py-5">
-          <div className="flex items-center gap-2.5 mb-4">
-            <span className="text-xl">⚠️</span>
-            <h4 className="text-[15px] font-bold text-slate-100">Risks to watch</h4>
+        <div className="card px-5 py-4">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-lg">⚠️</span>
+            <h4 className="text-[14px] font-semibold text-slate-100">Risks to watch</h4>
           </div>
-          <div className="grid sm:grid-cols-2 gap-3">
+          <div className="grid sm:grid-cols-2 gap-2">
             {view.risks.map((r, i) => (
-              <div key={i} className="flex gap-3 rounded-xl border border-amber-400/15 bg-amber-400/[0.04] px-4 py-3">
-                <span className="text-amber-400 shrink-0 mt-0.5">⚡</span>
-                <p className="text-[13px] text-amber-100/90 leading-relaxed">{r}</p>
+              <div key={i} className="flex gap-2.5 rounded-xl border border-amber-400/15 bg-amber-400/[0.04] px-3 py-2.5">
+                <span className="text-amber-400 shrink-0 mt-0.5 text-sm">⚡</span>
+                <p className="text-[12.5px] text-amber-100/90 leading-relaxed">{r}</p>
               </div>
             ))}
           </div>
         </div>
       )}
 
-      {/* ── Location basis (collapsed) ── */}
-      {view._basis && (
-        <details className="rounded-2xl border border-white/[0.07] overflow-hidden">
-          <summary className="px-5 py-3 cursor-pointer text-[12px] font-medium text-slate-400 hover:text-slate-200 select-none flex items-center gap-2 bg-white/[0.02]">
-            <span>🗺️</span>
-            <span>Why this crop was chosen · location &amp; field data</span>
-            <span className="ml-auto text-[10px] text-slate-600">expand ›</span>
-          </summary>
-          <div className="border-t border-white/5 px-5 py-4">
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
-              <BasisCell k="Season"      v={view._basis.season ?? "—"} />
-              <BasisCell k="Soil"        v={`${view._basis.soil ?? "?"}${view._basis.soilSource === "farm-record" ? " (farm)" : " (geo)"}`} />
-              <BasisCell k="Coordinates" v={view._basis.latitude != null ? `${view._basis.latitude.toFixed(3)}, ${view._basis.longitude?.toFixed(3)}` : "—"} />
-              <BasisCell k="Rain (7d)"   v={view._basis.rain7dMm != null ? `${Math.round(view._basis.rain7dMm)} mm` : "—"} />
-            </div>
-          </div>
-        </details>
-      )}
-
-      {/* ── Arize — ultra-minimal footer strip (expandable for judges) ── */}
+      {/* ── Arize — collapsed strip at bottom, expandable for judges ── */}
       <ArizePanel
         arize={view.arize}
         traceId={rec.traceId}
