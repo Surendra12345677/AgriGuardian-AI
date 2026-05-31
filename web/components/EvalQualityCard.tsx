@@ -1,24 +1,21 @@
 "use client";
 
-/**
- * Arize-style "agent quality" card: live score-distribution histogram + trend
- * sparkline + headline pass-rate + per-dimension eval breakdown.
- * Shown in the right column of the Plan page so judges see Arize metrics
- * before and after running the agent.
- */
 import { useEffect, useState } from "react";
 import { api, type EvalDistribution, type EvalTrend, type EvalTrendPoint } from "@/lib/api";
 
-const ARIZE_SPACE_ID    = process.env.NEXT_PUBLIC_ARIZE_SPACE_ID    ?? "";
-const ARIZE_PROJECT     = process.env.NEXT_PUBLIC_ARIZE_PROJECT_NAME ?? "agriguardian-ai";
-// Use the Arize home URL — deep-links require the user to already be on the right page.
-// Judges log in at app.arize.com and then navigate to the agriguardian-ai project.
-const ARIZE_HOME_URL    = "https://app.arize.com";
+
+/* ─── What each dimension means — plain English for farmers & judges ─── */
+const DIMS: [string, string, string, string][] = [
+  ["relevance",            "Plan relevance",      "Does the plan actually match this farm's soil, location, and season?",     "Checks the plan is for THIS farm, not a generic one"],
+  ["groundedness",         "Numbers are real",    "Are yield and income estimates backed by actual tool data (weather, soil, market prices)?", "Prevents made-up numbers"],
+  ["agronomicCorrectness", "Right crop choice",   "Is the recommended crop a good fit for this season + soil + location?",   "Agronomist-level accuracy check"],
+  ["hallucinationRisk",    "No false information","Did the AI invent anything that wasn't in the tools' real data?",          "1.0 = nothing was fabricated"],
+];
 
 export function EvalQualityCard({ refreshMs = 6000 }: { refreshMs?: number }) {
-  const [dist, setDist] = useState<EvalDistribution | null>(null);
+  const [dist,  setDist]  = useState<EvalDistribution | null>(null);
   const [trend, setTrend] = useState<EvalTrend | null>(null);
-  const [err, setErr]   = useState<string | null>(null);
+  const [err,   setErr]   = useState<string | null>(null);
 
   useEffect(() => {
     let stopped = false;
@@ -38,200 +35,190 @@ export function EvalQualityCard({ refreshMs = 6000 }: { refreshMs?: number }) {
     return () => { stopped = true; clearInterval(id); };
   }, [refreshMs]);
 
-  const max = dist ? Math.max(1, ...dist.buckets.map(b => b.count)) : 1;
-  const pass = dist?.passRate;
-  const avg  = dist?.averageScore;
-  const series = trend?.series ?? [];
-  const scores = series.map(p => p.evalScore).filter((s): s is number => s != null);
+  const bucketMax = dist ? Math.max(1, ...dist.buckets.map(b => b.count)) : 1;
+  const pass      = dist?.passRate;
+  const avg       = dist?.averageScore;
+  const series    = trend?.series ?? [];
+  const scores    = series.map(p => p.evalScore).filter((s): s is number => s != null);
+  const latest    = series[series.length - 1] as (EvalTrendPoint & { evalDetails?: Record<string, number> }) | undefined;
+  const dims      = latest ? (latest as any).evalDetails as Record<string, number> | undefined : undefined;
+  const delta     = trend?.deltaScore;
 
-  const latest = series[series.length - 1] as (EvalTrendPoint & { evalDetails?: Record<string, number> }) | undefined;
-  const dims = latest ? (latest as any).evalDetails as Record<string, number> | undefined : undefined;
-
-  const delta = trend?.deltaScore;
-  const trendLabel = delta == null ? null : delta > 0.02 ? "improving ↑" : delta < -0.02 ? "declining ↓" : "stable →";
-  const trendColor = delta == null ? "text-slate-400" : delta > 0.02 ? "text-emerald-300" : delta < -0.02 ? "text-amber-300" : "text-slate-300";
+  const trendBadge =
+    delta == null   ? null
+    : delta > 0.02  ? { label: "Getting better ↑", color: "text-emerald-300 bg-emerald-400/10 border-emerald-400/20" }
+    : delta < -0.02 ? { label: "Needs attention ↓", color: "text-amber-300 bg-amber-400/10 border-amber-400/20" }
+    : { label: "Consistent →", color: "text-slate-300 bg-white/[0.04] border-white/10" };
 
   return (
     <div className="card p-4 space-y-4">
-      {/* Header with Arize link */}
+
+      {/* ── Header ── */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <span className="chip">arize.evals</span>
-          <span className="text-xs text-slate-400">live quality baseline</span>
-          {trendLabel && (
-            <span className={`text-[10px] font-semibold ${trendColor}`}>{trendLabel}</span>
-          )}
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="text-base">🔬</span>
+            <span className="text-sm font-semibold text-slate-100">Plan Quality Monitor</span>
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-violet-400/15 text-violet-300 font-semibold uppercase tracking-wide">
+              Arize AI
+            </span>
+          </div>
+          <p className="text-[11px] text-slate-500 mt-0.5">
+            Every farm plan is automatically scored by a second AI for quality
+          </p>
         </div>
-        <span className="text-[11px] text-slate-500 font-mono">
-          {dist ? `${dist.scored}/${dist.count} scored` : "—"}
+        <span className="text-[11px] text-slate-500 font-mono shrink-0">
+          {dist ? `${dist.scored} plans scored` : "—"}
         </span>
       </div>
 
-      {/* Headline stats */}
+      {/* ── "What is Arize?" explanation ── */}
+      <div className="rounded-lg border border-violet-400/15 bg-violet-400/[0.04] px-3 py-2.5 text-[11px] text-slate-300 leading-relaxed">
+        <span className="font-semibold text-violet-200">What Arize does: </span>
+        After Gemini creates a farm plan, a separate AI judge (also Gemini) reads the plan and scores it on 4 quality checks.
+        These scores are stored in Arize AX — a monitoring platform built for AI applications —
+        so we can track if plan quality improves or declines over time.
+      </div>
+
+      {/* ── Overall score headline ── */}
       <div className="grid grid-cols-3 gap-2">
-        <Stat label="avg score"   value={fmt(avg)}        tone="emerald" />
-        <Stat label="pass rate"   value={pct(pass)}       tone="cyan" />
-        <Stat label="failures"    value={dist ? String(dist.failures) : "—"} tone={(dist?.failures ?? 0) > 0 ? "amber" : "slate"} />
+        <Stat label="Overall score"  value={fmt(avg)}   tone="emerald"
+              tip="Average quality score across all plans (0 = poor, 1 = excellent)" />
+        <Stat label="Plans passing"  value={pct(pass)}  tone="cyan"
+              tip="% of plans that scored 0.7 or above across all 4 checks" />
+        <Stat label="Failed plans"   value={dist ? String(dist.failures) : "—"}
+              tone={(dist?.failures ?? 0) > 0 ? "amber" : "slate"}
+              tip="Plans that scored below 0.7 — need improvement" />
       </div>
 
-      {/* Sparkline */}
-      <div>
-        <div className="text-[10px] text-slate-500 font-mono mb-1">
-          eval.score.aggregate · last {scores.length} runs
-        </div>
-        <Sparkline values={scores} />
-        {trend?.deltaScore != null && trend.series.length >= 2 && (
-          <div className="text-[10px] text-slate-500 mt-1">
-            Δ first→latest:{" "}
-            <span className={trend.deltaScore >= 0 ? "text-emerald-300" : "text-amber-300"}>
-              {trend.deltaScore >= 0 ? "+" : ""}{trend.deltaScore.toFixed(3)}
+      {/* Trend badge */}
+      {trendBadge && (
+        <div className={`inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full border ${trendBadge.color}`}>
+          📈 Quality trend: {trendBadge.label}
+          {delta != null && (
+            <span className="font-mono text-[10px] opacity-70">
+              ({delta >= 0 ? "+" : ""}{delta.toFixed(3)})
             </span>
-          </div>
-        )}
-      </div>
-
-      {/* Histogram */}
-      <div>
-        <div className="text-[10px] text-slate-500 font-mono mb-1">score distribution</div>
-        <div className="flex items-end gap-1 h-14">
-          {(dist?.buckets ?? new Array(10).fill({ count: 0, label: "" })).map((b, i) => {
-            const h = max ? Math.max(2, (b.count / max) * 100) : 2;
-            const passing = i >= 7;
-            return (
-              <div key={i} className="flex-1 flex flex-col items-center">
-                <div
-                  className={`w-full rounded-t ${passing ? "bg-emerald-400/70" : i >= 6 ? "bg-cyan-400/60" : "bg-amber-400/50"}`}
-                  style={{ height: `${h}%` }}
-                  title={`${b.label}  count=${b.count}`}
-                />
-              </div>
-            );
-          })}
+          )}
         </div>
-        <div className="flex justify-between text-[9px] text-slate-500 font-mono mt-1">
-          <span>0.0</span><span>0.5</span><span>1.0</span>
-        </div>
-      </div>
+      )}
 
-      {/* Per-dimension breakdown from latest run */}
-      {dims && (
-        <div className="rounded-lg border border-white/5 bg-white/[0.02] p-3">
-          <div className="text-[10px] text-slate-500 font-mono mb-2 flex items-center gap-2">
-            <span>latest run · 4-dim LLM judge</span>
-            <span className="px-1.5 py-0.5 rounded bg-violet-400/15 text-violet-300 text-[9px] font-semibold uppercase">gemini</span>
+      {/* ── Score over time chart ── */}
+      {scores.length > 0 && (
+        <div>
+          <div className="text-[11px] text-slate-400 font-medium mb-1.5">
+            📊 Quality score — last {scores.length} farm plans
           </div>
-          <div className="space-y-1.5">
-            {([
-              ["relevance",              "Relevance",              "Does the plan address the farm scenario?"],
-              ["groundedness",           "Groundedness",           "Are impact numbers backed by tool outputs?"],
-              ["agronomicCorrectness",   "Agronomic Correctness",  "Does the crop fit season + soil + location?"],
-              ["hallucinationRisk",      "Hallucination Risk",     "1 = no fabrication detected"],
-            ] as [string, string, string][]).map(([key, label, tip]) => {
+          <Sparkline values={scores} />
+          <div className="flex justify-between text-[10px] text-slate-600 mt-1">
+            <span>Oldest plan</span>
+            <span>Most recent</span>
+          </div>
+        </div>
+      )}
+
+      {/* ── 4 quality dimensions — plain English ── */}
+      {dims ? (
+        <div>
+          <div className="text-[11px] text-slate-400 font-medium mb-2">
+            ✅ Last plan's quality checks
+          </div>
+          <div className="space-y-2">
+            {DIMS.map(([key, label, tip]) => {
               const v = dims[key] ?? dims[key.replace(/([A-Z])/g, "_$1").toLowerCase()];
               if (v == null) return null;
-              const pct100 = Math.round(v * 100);
-              const color = v >= 0.8 ? "bg-emerald-400" : v >= 0.6 ? "bg-cyan-400" : "bg-amber-400";
+              const pct100  = Math.round(v * 100);
+              const barColor =
+                v >= 0.8 ? "bg-emerald-400" : v >= 0.6 ? "bg-cyan-400" : "bg-amber-400";
+              const textColor =
+                v >= 0.8 ? "text-emerald-300" : v >= 0.6 ? "text-cyan-300" : "text-amber-300";
+              const statusIcon = v >= 0.8 ? "✅" : v >= 0.6 ? "🟡" : "⚠️";
               return (
-                <div key={key} title={tip}>
-                  <div className="flex justify-between text-[10px] mb-0.5">
-                    <span className="text-slate-400">{label}</span>
-                    <span className={v >= 0.8 ? "text-emerald-300" : v >= 0.6 ? "text-cyan-300" : "text-amber-300"}>
-                      {v.toFixed(2)}
+                <div key={key} className="rounded-lg border border-white/5 bg-white/[0.02] px-3 py-2">
+                  <div className="flex items-center justify-between mb-1">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-sm">{statusIcon}</span>
+                      <span className="text-[12px] font-medium text-slate-200">{label}</span>
+                    </div>
+                    <span className={`text-[12px] font-bold ${textColor}`}>
+                      {pct100}%
                     </span>
                   </div>
+                  <p className="text-[10px] text-slate-500 mb-1.5">{tip}</p>
                   <div className="h-1.5 w-full rounded-full bg-white/[0.05] overflow-hidden">
-                    <div className={`h-full rounded-full ${color}`} style={{ width: `${pct100}%` }} />
+                    <div
+                      className={`h-full rounded-full transition-all duration-500 ${barColor}`}
+                      style={{ width: `${pct100}%` }}
+                    />
                   </div>
                 </div>
               );
             })}
           </div>
         </div>
+      ) : (
+        /* show dimension explanations even before first run */
+        <div>
+          <div className="text-[11px] text-slate-400 font-medium mb-2">
+            🔍 What gets checked (shown after first plan)
+          </div>
+          <div className="space-y-1.5">
+            {DIMS.map(([, label, , detail]) => (
+              <div key={label} className="flex items-start gap-2 text-[11px] text-slate-400">
+                <span className="mt-0.5 text-violet-400 shrink-0">◆</span>
+                <span><span className="text-slate-300 font-medium">{label}</span> — {detail}</span>
+              </div>
+            ))}
+          </div>
+        </div>
       )}
 
-      {/* Open in Arize — prominent CTA for judges */}
-      <div className="space-y-2">
-        <a
-          href={ARIZE_HOME_URL}
-          target="_blank"
-          rel="noreferrer"
-          className="flex items-center justify-center gap-2 w-full rounded-xl
-                     border border-violet-400/40 bg-violet-400/[0.06]
-                     px-4 py-2.5 text-sm font-semibold text-violet-200
-                     hover:bg-violet-400/15 hover:border-violet-400/60 transition"
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-            <polyline points="15 3 21 3 21 9" />
-            <line x1="10" y1="14" x2="21" y2="3" />
-          </svg>
-          Open Arize AX Dashboard →
-        </a>
-
-        {/* Login notice + project details for judges */}
-        <div className="rounded-lg border border-violet-400/10 bg-violet-400/[0.03] px-3 py-2 space-y-1.5">
-          <div className="flex items-start gap-1.5 text-[11px] text-slate-300">
-            <span className="text-violet-300 mt-0.5 shrink-0">🔐</span>
-            <span>
-              <span className="font-semibold text-violet-200">Login required</span>
-              {" "}— sign in at app.arize.com, then open project{" "}
-              <code className="text-emerald-300 text-[10px]">{ARIZE_PROJECT}</code>.
-              Arize judges have direct access.
-            </span>
+      {/* ── Score histogram ── */}
+      {dist && (
+        <div>
+          <div className="text-[11px] text-slate-400 font-medium mb-1.5">
+            📉 Score distribution across all plans
+          </div>
+          <div className="flex items-end gap-1 h-12">
+            {dist.buckets.map((b, i) => {
+              const h       = bucketMax ? Math.max(2, (b.count / bucketMax) * 100) : 2;
+              const passing = i >= 7;
+              return (
+                <div key={i} className="flex-1 flex flex-col items-center">
+                  <div
+                    className={`w-full rounded-t ${passing ? "bg-emerald-400/70" : i >= 6 ? "bg-cyan-400/60" : "bg-amber-400/50"}`}
+                    style={{ height: `${h}%` }}
+                    title={`Score ${b.label}: ${b.count} plan${b.count !== 1 ? "s" : ""}`}
+                  />
+                </div>
+              );
+            })}
+          </div>
+          <div className="flex justify-between text-[10px] text-slate-600 mt-1">
+            <span>Low quality (0.0)</span>
+            <span className="text-emerald-600">High quality (1.0)</span>
           </div>
         </div>
-      </div>
-
-      {/* What judges can click */}
-      <div className="rounded-lg border border-violet-400/10 bg-violet-400/[0.03] px-3 py-2.5 space-y-1.5">
-        <div className="text-[10px] font-semibold text-violet-300 uppercase tracking-wider">
-          What you can do in Arize AX
-        </div>
-        {[
-          ["⚖️", "LLM-as-Judge evals",  "4 dimensions auto-scored per run"],
-          ["🔍", "Full trace tree",      "Every span: input, output, latency"],
-          ["🔁", "Replay failed traces", "Regression test from the dashboard"],
-          ["📊", "Score trends",         "Pass rate & delta over all runs"],
-        ].map(([icon, title, sub]) => (
-          <div key={title} className="flex items-start gap-2">
-            <span className="text-base flex-shrink-0">{icon}</span>
-            <div className="text-[11px]">
-              <span className="text-slate-200 font-medium">{title}</span>
-              <span className="text-slate-500"> — {sub}</span>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* How OTLP works */}
-      <div className="text-[10px] text-slate-500 leading-relaxed border-t border-white/5 pt-2">
-        <span className="text-violet-300 font-semibold">Pipeline: </span>
-        Agent emits{" "}
-        <code className="text-slate-400">openinference.span.kind=LLM|TOOL|EVALUATOR</code>
-        {" "}spans via OTLP/HTTP → Arize AX. Spans tagged{" "}
-        <code className="text-violet-200">eval.label=pass/fail</code>{" "}
-        stream in real time.
-      </div>
+      )}
 
       {err && (
-        <div className="text-[11px] text-amber-400/80">
-          {err} — scores appear here once a recommendation runs.
+        <div className="text-[11px] text-amber-400/80 rounded-lg border border-amber-400/10 bg-amber-400/[0.03] px-3 py-2">
+          Quality monitor offline — scores will appear here after the first plan runs.
         </div>
       )}
     </div>
   );
 }
 
-function Stat({ label, value, tone }: { label: string; value: string; tone: "emerald" | "cyan" | "amber" | "slate" }) {
+function Stat({ label, value, tone, tip }: { label: string; value: string; tone: "emerald" | "cyan" | "amber" | "slate"; tip?: string }) {
   const color =
     tone === "emerald" ? "text-emerald-300" :
-    tone === "cyan"    ? "text-cyan-300" :
-    tone === "amber"   ? "text-amber-300" :
-                         "text-slate-300";
+    tone === "cyan"    ? "text-cyan-300"    :
+    tone === "amber"   ? "text-amber-300"   : "text-slate-300";
   return (
-    <div className="rounded-md bg-white/[0.03] border border-white/10 px-2 py-1.5">
-      <div className="text-[10px] text-slate-500 font-mono">{label}</div>
-      <div className={`text-base font-semibold ${color}`}>{value}</div>
+    <div className="rounded-md bg-white/[0.03] border border-white/10 px-2 py-1.5 text-center" title={tip}>
+      <div className={`text-lg font-bold ${color}`}>{value}</div>
+      <div className="text-[10px] text-slate-500 mt-0.5 leading-snug">{label}</div>
     </div>
   );
 }

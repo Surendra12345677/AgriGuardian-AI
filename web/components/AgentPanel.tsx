@@ -288,15 +288,15 @@ function ConfidenceRing({ value }: { value: number }) {
   );
 }
 
-// ─── Compact Arize trace badge (replaces the old full ArizePanel) ─────────────
+// ─── Arize quality badge shown at the bottom of each result ─────────────────
 function ArizeBadge({ arize, traceId, evalScore }: {
   arize?: Parsed["arize"];
   traceId?: string;
   evalScore?: number;
 }) {
   const [copied, setCopied] = useState(false);
-  const tid = arize?.traceId || traceId || "";
-  const spanCount = arize?.spansExported ?? 9;
+  const tid        = arize?.traceId || traceId || "";
+  const spanCount  = arize?.spansExported ?? 9;
 
   function copyTrace() {
     if (!tid) return;
@@ -306,48 +306,52 @@ function ArizeBadge({ arize, traceId, evalScore }: {
     });
   }
 
-  if (!tid && !arize) return null;
+  /* eval score interpretation */
+  const scoreLabel =
+    evalScore == null    ? null
+    : evalScore >= 0.8   ? { text: "Excellent quality",   color: "text-emerald-300", bg: "bg-emerald-400/10 border-emerald-400/20", icon: "✅" }
+    : evalScore >= 0.65  ? { text: "Good quality",         color: "text-cyan-300",    bg: "bg-cyan-400/10 border-cyan-400/20",       icon: "✅" }
+    : evalScore >= 0.5   ? { text: "Acceptable quality",   color: "text-amber-300",   bg: "bg-amber-400/10 border-amber-400/20",     icon: "🟡" }
+    :                      { text: "Needs improvement",    color: "text-red-300",     bg: "bg-red-400/10 border-red-400/20",         icon: "⚠️" };
 
   return (
-    <div className="rounded-xl border border-violet-400/10 bg-violet-400/[0.03] px-4 py-3">
-      <div className="flex items-center gap-2 flex-wrap">
-        {/* Live badge */}
-        <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-300 uppercase tracking-wider">
-          <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-          Arize AX · Live
-        </span>
-        <span className="text-[10px] text-slate-500">{spanCount} OTel spans exported</span>
-        {evalScore != null && (
-          <span className={`ml-auto text-[11px] font-bold ${evalScore >= 0.75 ? "text-emerald-300" : evalScore >= 0.6 ? "text-cyan-300" : "text-amber-300"}`}>
-            {evalScore >= 0.75 ? "✓ AI judge: pass" : "⚠ AI judge: review"} · {evalScore.toFixed(2)}
+    <div className="rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3 space-y-2.5">
+      {/* Row 1: Monitoring label + score badge */}
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex items-center gap-2">
+          <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+          <span className="text-[11px] font-semibold text-slate-300">
+            Monitored by Arize AI
+          </span>
+          <span className="text-[10px] text-slate-500">· {spanCount} steps recorded</span>
+        </div>
+        {scoreLabel && (
+          <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-0.5 rounded-full border ${scoreLabel.bg} ${scoreLabel.color}`}>
+            {scoreLabel.icon} {scoreLabel.text} · {evalScore!.toFixed(2)}
           </span>
         )}
       </div>
+
+      {/* Row 2: Plain-English explanation */}
+      <p className="text-[11px] text-slate-400 leading-relaxed">
+        This plan was checked by a second AI for accuracy, relevance, and correct crop selection.
+        {spanCount > 0 && ` All ${spanCount} agent steps (weather fetch, soil lookup, market prices, reasoning) were recorded for quality monitoring.`}
+      </p>
+
+      {/* Row 3: Trace reference (for judges / developers) */}
       {tid && (
-        <div className="mt-2 flex items-center gap-2">
-          <span className="text-[10px] text-slate-500 shrink-0">Trace ID</span>
-          <code className="flex-1 text-[10px] text-slate-400 font-mono truncate">{tid}</code>
+        <div className="flex items-center gap-2 pt-1 border-t border-white/5">
+          <span className="text-[10px] text-slate-500 shrink-0">Run ID</span>
+          <code className="flex-1 text-[10px] text-slate-500 font-mono truncate">{tid}</code>
           <button
             type="button"
             onClick={copyTrace}
-            className="shrink-0 text-[10px] px-2 py-0.5 rounded border border-violet-400/20 text-violet-300 hover:bg-violet-400/10 transition"
+            className="shrink-0 text-[10px] px-2 py-0.5 rounded border border-white/10 text-slate-400 hover:text-slate-200 hover:border-white/20 transition"
           >
-            {copied ? "✓ Copied" : "Copy"}
+            {copied ? "✓ Copied" : "Copy ID"}
           </button>
         </div>
       )}
-      <p className="mt-2 text-[10px] text-slate-500 leading-relaxed">
-        Every agent step streams to Arize AX via OTLP — full span tree, LLM-as-judge scores, and regression replay available in the Arize dashboard.
-      </p>
-    </div>
-  );
-}
-
-function _unused_ArizeRow({ label, value, color }: { label: string; value: string; color: string }) {
-  return (
-    <div className="flex justify-between gap-2">
-      <span className="text-slate-400">{label}</span>
-      <code className={`${color} font-semibold text-[12px]`}>{value}</code>
     </div>
   );
 }
