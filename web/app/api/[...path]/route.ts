@@ -89,11 +89,9 @@ async function proxy(req: NextRequest, ctx: { params: Promise<{ path: string[] }
     return NextResponse.json(
       {
         error: isAbort
-          ? `Backend timed out after ${timeoutMs / 1000}s. Is Spring Boot + MongoDB running?`
-          : "Upstream backend unreachable — is Spring Boot running on port 8080?",
-        target,
+          ? `Backend timed out after ${timeoutMs / 1000}s — check that the backend service is running and reachable.`
+          : `Backend unreachable at ${base} — verify BACKEND_URL is correct and the service is running.`,
         detail: err instanceof Error ? err.message : String(err),
-        hint: "Run: cd AgriGuardian-AI && ./gradlew bootRun",
       },
       { status: isAbort ? 504 : 502 },
     );
