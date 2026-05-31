@@ -80,20 +80,37 @@ export type EvalDistribution = {
   buckets: { label: string; lo: number; hi: number; count: number }[];
 };
 
-async function http<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(path, {
-    ...init,
-    headers: { "Content-Type": "application/json", ...(init?.headers || {}) },
-    cache: "no-store",
-  });
+async function http<T>(path: string, init?: RequestInit, timeoutMs = 20_000): Promise<T> {
+  // Long-running endpoints (LLM calls) need a longer timeout.
+  const isLongPoll = path.includes("/recommendations") || path.includes("/diagnose") || path.includes("/replay") || path.includes("/scenarios");
+  const ms = isLongPoll ? 120_000 : timeoutMs;
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
+
+  let res: Response;
+  try {
+    res = await fetch(path, {
+      ...init,
+      headers: { "Content-Type": "application/json", ...(init?.headers || {}) },
+      cache: "no-store",
+      signal: controller.signal,
+    });
+  } catch (err) {
+    clearTimeout(timer);
+    if (err instanceof Error && err.name === "AbortError") {
+      throw new Error(`Request timed out after ${ms / 1000}s. Check that the backend is running.`);
+    }
+    throw new Error("Cannot reach the backend — is Spring Boot running on port 8080?");
+  }
+  clearTimeout(timer);
+
   if (!res.ok) {
     const body = await res.text();
-    // Spring returns RFC-7807 application/problem+json — pull out the
-    // human-readable `detail` so the UI can show actionable upstream errors
-    // (e.g. Gemini quota / billing / model-not-found messages).
     let detail = body || path;
     try {
       const j = JSON.parse(body);
+      if (j && typeof j.error === "string")  detail = j.error;
       if (j && typeof j.detail === "string" && j.detail.trim()) detail = j.detail;
       else if (j && typeof j.title === "string") detail = j.title;
     } catch { /* not JSON — keep raw body */ }

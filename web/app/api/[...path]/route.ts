@@ -45,20 +45,17 @@ async function proxy(req: NextRequest, ctx: { params: Promise<{ path: string[] }
       {
         error: "BACKEND_URL is not configured on the agriguardian-web service.",
         hint:
-          "gcloud run services update agriguardian-web " +
-          "--region us-central1 --update-env-vars " +
-          "BACKEND_URL=https://<backend-cloud-run-url>",
+          "Set BACKEND_URL=http://localhost:8080 in web/.env.local for local dev, " +
+          "or update the Cloud Run service env var for production.",
       },
       { status: 503 },
     );
   }
 
   const { path } = await ctx.params;
-  const search = req.nextUrl.search; // includes leading "?" or ""
+  const search = req.nextUrl.search;
   const target = `${base}/api/${(path ?? []).join("/")}${search}`;
 
-  // Forward most headers but drop hop-by-hop + host so the upstream
-  // sees its own host header (Cloud Run requires the right Host).
   const fwdHeaders = new Headers();
   req.headers.forEach((v, k) => {
     const lk = k.toLowerCase();
@@ -69,6 +66,13 @@ async function proxy(req: NextRequest, ctx: { params: Promise<{ path: string[] }
   const method = req.method.toUpperCase();
   const hasBody = method !== "GET" && method !== "HEAD";
 
+  // Recommendation calls can take up to 90s (Gemini + tools).
+  // All other endpoints (farm CRUD, evals) time out at 15s.
+  const isLongPoll = target.includes("/recommendations") || target.includes("/diagnose") || target.includes("/replay");
+  const timeoutMs  = isLongPoll ? 120_000 : 15_000;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
   let upstream: Response;
   try {
     upstream = await fetch(target, {
@@ -77,17 +81,24 @@ async function proxy(req: NextRequest, ctx: { params: Promise<{ path: string[] }
       body: hasBody ? await req.arrayBuffer() : undefined,
       redirect: "manual",
       cache: "no-store",
+      signal: controller.signal,
     });
   } catch (err) {
+    clearTimeout(timer);
+    const isAbort = err instanceof Error && err.name === "AbortError";
     return NextResponse.json(
       {
-        error: "Upstream backend unreachable.",
+        error: isAbort
+          ? `Backend timed out after ${timeoutMs / 1000}s. Is Spring Boot + MongoDB running?`
+          : "Upstream backend unreachable — is Spring Boot running on port 8080?",
         target,
         detail: err instanceof Error ? err.message : String(err),
+        hint: "Run: cd AgriGuardian-AI && ./gradlew bootRun",
       },
-      { status: 502 },
+      { status: isAbort ? 504 : 502 },
     );
   }
+  clearTimeout(timer);
 
   const respHeaders = new Headers();
   upstream.headers.forEach((v, k) => {
