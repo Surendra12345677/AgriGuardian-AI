@@ -121,7 +121,7 @@ export function EvalQualityCard({ refreshMs = 6000 }: { refreshMs?: number }) {
         </div>
       )}
 
-      {/* ── 4 quality dimensions ── */}
+      {/* ── 4 quality dimensions (always visible, no tooltips) ── */}
       {dims ? (
         <div>
           <div className="flex items-center gap-2 mb-3">
@@ -133,7 +133,7 @@ export function EvalQualityCard({ refreshMs = 6000 }: { refreshMs?: number }) {
             )}
           </div>
           <div className="space-y-3">
-            {DIMS.map(([key, label, tip]) => {
+            {DIMS.map(([key, label]) => {
               const v = typeof dims[key] === "number" ? dims[key] as number
                       : typeof dims[key.replace(/([A-Z])/g, "_$1").toLowerCase()] === "number"
                         ? dims[key.replace(/([A-Z])/g, "_$1").toLowerCase()] as number
@@ -144,7 +144,7 @@ export function EvalQualityCard({ refreshMs = 6000 }: { refreshMs?: number }) {
               const txtColor = v >= 0.8 ? "text-emerald-300" : v >= 0.6 ? "text-cyan-300" : "text-amber-300";
               const ico      = v >= 0.8 ? "✅" : v >= 0.6 ? "🟡" : "⚠️";
               return (
-                <div key={key} title={tip}>
+                <div key={key}>
                   <div className="flex items-center justify-between mb-1.5">
                     <div className="flex items-center gap-1.5">
                       <span className="text-sm">{ico}</span>
@@ -174,46 +174,54 @@ export function EvalQualityCard({ refreshMs = 6000 }: { refreshMs?: number }) {
         </div>
       )}
 
-      {/* ── Score histogram ── */}
-      {dist && (
-        <div>
-          <div className="text-[11px] text-slate-400 font-medium mb-2">📉 Score distribution</div>
-          <div className="flex items-end gap-0.5 h-10">
-            {dist.buckets.map((b, i) => {
-              const h = bucketMax ? Math.max(4, (b.count / bucketMax) * 100) : 4;
-              return (
-                <div key={i} className="flex-1 flex flex-col items-center">
-                  <div
-                    className={`w-full rounded-sm ${i >= 7 ? "bg-emerald-400/70" : i >= 6 ? "bg-cyan-400/60" : "bg-amber-400/50"}`}
-                    style={{ height: `${h}%` }}
-                    title={`${b.label}: ${b.count} plan${b.count !== 1 ? "s" : ""}`}
-                  />
-                </div>
-              );
-            })}
-          </div>
-          <div className="flex justify-between text-[10px] text-slate-600 mt-1">
-            <span>Low (0.0)</span>
-            <span className="text-emerald-600">High (1.0)</span>
-          </div>
-        </div>
-      )}
-
-      {/* ── Arize AX link (collapsible) ── */}
-      <details className="rounded-xl border border-violet-400/15 bg-violet-400/[0.04] overflow-hidden">
-        <summary className="px-4 py-3 cursor-pointer flex items-center gap-2 text-[12px] font-medium text-violet-300 select-none hover:text-violet-200">
+      {/* ── Arize details (collapsible) — histogram + explanation + nav steps ── */}
+      <details className="group rounded-xl border border-violet-400/15 bg-violet-400/[0.04] overflow-hidden">
+        <summary className="px-4 py-3 cursor-pointer flex items-center gap-2 text-[12px] font-medium text-violet-300 select-none hover:text-violet-200 list-none">
           <span>🔗</span>
           <span>View traces in Arize AX</span>
-          <span className="ml-auto text-[10px] text-slate-500 font-normal">project: {projectName}</span>
+          <span className="ml-auto text-[10px] text-slate-500 font-normal group-open:hidden">project: {projectName}</span>
+          <span className="ml-auto text-[10px] text-slate-500 font-normal hidden group-open:inline">‹ collapse</span>
         </summary>
-        <div className="border-t border-violet-400/10 px-4 pb-4 pt-3 space-y-3">
-          <p className="text-[11px] text-slate-400 leading-relaxed">
-            <span className="text-violet-300 font-medium">What Arize does: </span>
-            Every agent step emits an <span className="text-blue-300">OpenTelemetry span</span> shipped to{" "}
-            <span className="text-violet-200 font-medium">Arize AX</span> — enabling trace replay, eval scoring, and regression detection without touching code.
-          </p>
-          <div className="text-[11px] text-slate-400 space-y-1">
-            <div className="flex gap-2"><span className="text-violet-300 shrink-0">①</span><span>Go to <span className="font-mono text-slate-200">app.arize.com</span></span></div>
+        <div className="border-t border-violet-400/10 px-4 pb-4 pt-3 space-y-4">
+
+          {/* Score distribution histogram */}
+          {dist && (
+            <div>
+              <div className="text-[11px] text-slate-400 font-medium mb-2">
+                📉 Score distribution · {dist.buckets.length} buckets
+              </div>
+              <div className="flex items-end gap-0.5 h-12">
+                {dist.buckets.map((b, i) => {
+                  const barH = bucketMax ? Math.max(4, (b.count / bucketMax) * 100) : 4;
+                  return (
+                    <div key={i} className="flex-1 flex flex-col items-center group/bar relative">
+                      <div
+                        className={`w-full rounded-sm ${i >= 7 ? "bg-emerald-400/70" : i >= 6 ? "bg-cyan-400/60" : "bg-amber-400/50"}`}
+                        style={{ height: `${barH}%` }}
+                      />
+                      {/* custom tooltip on hover — no native browser popup */}
+                      <span className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 text-[9px] bg-slate-800 text-slate-200 px-1.5 py-0.5 rounded whitespace-nowrap opacity-0 group-hover/bar:opacity-100 pointer-events-none z-10 transition-opacity">
+                        {b.label}: {b.count}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="flex justify-between text-[10px] text-slate-600 mt-1">
+                <span>Low (0.0)</span>
+                <span className="text-emerald-600">High (1.0)</span>
+              </div>
+              <p className="mt-3 text-[11px] text-slate-400 leading-relaxed">
+                In <span className="text-violet-300 font-medium">Arize AX</span>: Each bar = one agent run scored by Gemini LLM-as-judge on 4 dimensions.
+                Spans tagged <code className="text-emerald-300 text-[10px]">eval.label=pass/fail</code> stream via OTLP in real time.
+                Click any trace ID above to open the full span tree in Arize.
+              </p>
+            </div>
+          )}
+
+          {/* Navigation steps */}
+          <div className="text-[11px] text-slate-400 space-y-1.5">
+            <div className="flex gap-2"><span className="text-violet-300 shrink-0">①</span><span>Go to <span className="font-mono text-slate-200">app.arize.com</span> and log in</span></div>
             <div className="flex gap-2"><span className="text-violet-300 shrink-0">②</span><span>Select project <span className="font-mono text-emerald-300">{projectName}</span></span></div>
             <div className="flex gap-2"><span className="text-violet-300 shrink-0">③</span><span>Click <span className="text-slate-100 font-medium">Traces</span> — every agent run is here</span></div>
             <div className="flex gap-2"><span className="text-violet-300 shrink-0">④</span><span>Click any trace to see all spans, tool I/O, and eval scores</span></div>
