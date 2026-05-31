@@ -252,7 +252,8 @@ public class AgentEvaluator {
     /* ── Deterministic fallback rubric ─────────────────────────────── */
 
     EvalResult evaluateRubric(String recommendationJson, Map<String, Object> ctx) {
-        double rel = 0.85, grd = 0.85, agr = 0.85, hal = 0.95;
+        // Conservative defaults — the rubric must earn a high score, not start at one.
+        double rel = 0.65, grd = 0.60, agr = 0.65, hal = 0.80;
         try {
             Matcher m = JSON_OBJECT.matcher(recommendationJson == null ? "" : recommendationJson);
             if (m.find()) {
@@ -273,10 +274,10 @@ public class AgentEvaluator {
                         && imp.path("expectedRevenueInr").asInt(0) > 0
                         && imp.path("extraIncomeInr").asInt(0)     > 0
                         && imp.path("paybackWeeks").asInt(0)       > 0) {
-                    grd = 0.92;
+                    grd = 0.82;
                 } else {
-                    grd = 0.55;
-                    hal = 0.6;
+                    grd = 0.48;
+                    hal = 0.55;
                 }
 
                 // Agronomic correctness — does crop appear in `_basis.shortlist`?
@@ -287,7 +288,7 @@ public class AgentEvaluator {
                     for (JsonNode c : basis.path("shortlist")) {
                         if (crop.equals(c.asText("").toLowerCase())) { inList = true; break; }
                     }
-                    agr = inList ? 0.95 : 0.55;
+                    agr = inList ? 0.88 : 0.50;
                 }
 
                 // Hallucination risk — penalize if confidence > 0.9 AND offline-fallback

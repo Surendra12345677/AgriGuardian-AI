@@ -52,7 +52,7 @@ export function AgentTrace({
 
     // plan → parallel tools all done together → generate → reflect → persist
     const PLAN_MS      = 300;
-    const TOOLS_MS     = 600;  // all 5 parallel tools complete together
+    const TOOLS_MS     = 32000; // market tool calls Gemini internally (~30 s is normal)
     const GENERATE_MS  = 12000;
     const REFLECT_MS   = 400;
     const PERSIST_MS   = 300;

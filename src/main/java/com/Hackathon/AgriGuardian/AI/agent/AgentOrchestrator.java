@@ -269,10 +269,10 @@ public class AgentOrchestrator {
                 if ("market".equals(toolName)) {
                     // Pass projected HARVEST date so market prices reflect what the
                     // farmer will see at selling time, not at planting time.
-                    // KHARIF (Jun–Oct): harvest ~4 months after sowing
-                    // RABI  (Nov–Mar): harvest ~4 months after sowing
-                    // ZAID  (Apr–May): short-season crops, harvest ~2 months out
-                    int harvestMonthsAhead = (currentMonth >= 6 && currentMonth <= 10) ? 4
+                    // PRE-KHARIF / KHARIF (sow Jun): harvest ~4 months after sowing
+                    // RABI  (sow Nov–Dec): harvest ~4 months after sowing
+                    // ZAID  (sow Apr): short-season crops, harvest ~2 months out
+                    int harvestMonthsAhead = (currentMonth >= 5 && currentMonth <= 10) ? 4
                             : (currentMonth == 11 || currentMonth == 12 || currentMonth <= 3) ? 4
                             : 2;
                     args.put("date", today.plusMonths(harvestMonthsAhead).toString());
@@ -315,14 +315,15 @@ public class AgentOrchestrator {
                 toolFutures.add(f);
             }
 
-            // Wait for all tools to finish (or timeout at 12 s total).
-            // Tools are fully parallel so 12 s = slowest single call, not sum.
-            // Reducing from 20 s trims worst-case latency without dropping data.
+            // Wait for all tools to finish (or timeout at 42 s total).
+            // MarketPriceTool calls Gemini internally and can take 30+ s.
+            // We must wait long enough for it to complete so harvest-price data
+            // is available when we build the Gemini context below.
             try {
                 CompletableFuture.allOf(toolFutures.toArray(new CompletableFuture[0]))
-                        .get(12, java.util.concurrent.TimeUnit.SECONDS);
+                        .get(42, java.util.concurrent.TimeUnit.SECONDS);
             } catch (java.util.concurrent.TimeoutException te) {
-                log.warn("Tool parallel batch timed out after 12 s — proceeding with partial results");
+                log.warn("Tool parallel batch timed out after 42 s — proceeding with partial results");
             } catch (Exception ie) {
                 log.warn("Tool parallel batch interrupted: {}", ie.toString());
             } finally {
@@ -426,8 +427,14 @@ public class AgentOrchestrator {
             int currentDay   = today.getDayOfMonth();
             int currentYear  = today.getYear();
             String todayStr  = today.format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE); // e.g. 2026-05-31
+            // Agronomic seasons:
+            //   KHARIF        Jun–Oct (monsoon sowing / rainy season)
+            //   PRE-KHARIF    16 May–31 May (prep window — farmers buy seeds + prepare land)
+            //   RABI          Nov–Mar (winter sowing)
+            //   ZAID          1 Apr–15 May (short-cycle summer crops)
             String season =
                     (currentMonth >= 6 && currentMonth <= 10) ? "KHARIF (monsoon sowing)"
+                  : (currentMonth == 5 && currentDay >= 16)   ? "PRE-KHARIF (monsoon prep)"
                   : (currentMonth == 11 || currentMonth == 12 || currentMonth <= 3) ? "RABI (winter sowing)"
                   : "ZAID (short summer crops)";
             // Pull rainfall + soil out of the tool outputs so the shortlist is honest.
@@ -895,9 +902,10 @@ public class AgentOrchestrator {
         boolean red    = soil.contains("red");
         boolean loam   = soil.contains("loam") || soil.contains("silt") || soil.isEmpty();
 
-        boolean kharif = month >= 6 && month <= 10;
-        boolean rabi   = month == 11 || month == 12 || month <= 3;
-        boolean zaid   = month == 4  || month == 5;
+        boolean kharif    = month >= 6 && month <= 10;
+        boolean preKharif = month == 5;   // whole of May is pre-Kharif prep in the shortlist
+        boolean rabi      = month == 11 || month == 12 || month <= 3;
+        boolean zaid      = month == 4;
 
         // Coarse Indian agro-climatic zone from longitude:
         //   <74E  → western/Gujarat-Rajasthan belt (drier, cotton/groundnut)
@@ -922,6 +930,21 @@ public class AgentOrchestrator {
             if (central) { pool.add("soybean");   pool.add("cotton"); }
             if (east)    { pool.add("rice");      pool.add("jute"); }
             if (ne)      { pool.add("rice");      pool.add("turmeric"); }
+        } else if (preKharif) {
+            // May: farmers are buying seeds and preparing land for Kharif.
+            // Recommend the early-sown Kharif crops that go in the ground on the
+            // first rain (mid-June) — the same logic as KHARIF but with a bias
+            // toward crops that are sown earliest in the monsoon window.
+            if (black || clayey) { pool.add("soybean"); pool.add("cotton"); pool.add("pigeon pea"); }
+            if (red || sandy)    { pool.add("groundnut"); pool.add("pearl millet"); pool.add("sesame"); }
+            if (loam)            { pool.add("green gram"); pool.add("maize"); pool.add("black gram"); }
+            if (rain7d < 8)      { pool.add("pearl millet"); pool.add("sorghum"); }
+            // Longitude flavour
+            if (west)    { pool.add("groundnut"); pool.add("pearl millet"); pool.add("castor"); }
+            if (central) { pool.add("soybean"); pool.add("cotton"); }
+            if (east)    { pool.add("rice"); pool.add("jute"); }
+            if (ne)      { pool.add("rice"); pool.add("turmeric"); pool.add("jute"); }
+            if (lat >= 24) { pool.add("maize"); pool.add("arhar"); }   // Punjab/UP early sowing
         } else if (rabi) {
             if (lat >= 24)             { pool.add("wheat"); pool.add("mustard"); pool.add("barley"); pool.add("peas"); }
             if (lat < 24 && lat >= 18) { pool.add("chickpea"); pool.add("wheat"); pool.add("safflower"); }

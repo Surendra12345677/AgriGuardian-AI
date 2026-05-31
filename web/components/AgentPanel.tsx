@@ -315,10 +315,10 @@ export default function AgentPanel({
             <div className="h-1 w-full rounded-full bg-white/[0.06] overflow-hidden">
               <div
                 className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-cyan-400 transition-all duration-1000"
-                style={{ width: `${Math.min(95, (liveElapsed / 35) * 100)}%` }}
-              />
+              style={{ width: `${Math.min(95, (liveElapsed / 50) * 100)}%` }}
+            />
             </div>
-            <p className="text-[10px] text-slate-500">Typically 25–35 s · result will appear automatically when ready</p>
+            <p className="text-[10px] text-slate-500">Typically 40–50 s (market prices via Gemini) · result appears automatically</p>
           </div>
         )}
       </div>
@@ -418,62 +418,93 @@ function WeatherWidget({ basis }: { basis: NonNullable<Parsed["_basis"]> }) {
   const humPct   = basis.humidity  != null ? `${Math.round(basis.humidity * 100)}%` : null;
   const rain     = basis.rain7dMm  != null ? `${Math.round(basis.rain7dMm)} mm` : null;
   const days     = basis.forecastDays ?? 7;
+  const month    = basis.month ?? (new Date().getMonth() + 1);
 
   const tempColor = (basis.tempAvgC ?? 28) > 35
     ? "text-orange-300" : (basis.tempAvgC ?? 28) > 25
     ? "text-amber-200" : "text-cyan-300";
 
+  // Monsoon / seasonal context label derived from month + rain
+  const seasonLabel = (() => {
+    const r = basis.rain7dMm ?? 0;
+    if (month >= 6 && month <= 9) {
+      if (r > 50) return { icon: "⛈️", label: "Peak monsoon",    color: "text-blue-300" };
+      if (r > 20) return { icon: "🌧️", label: "Active monsoon",  color: "text-blue-300" };
+      return            { icon: "🌦️", label: "Monsoon season",   color: "text-sky-300"  };
+    }
+    if (month === 5)                 return { icon: "🌩️", label: "Pre-monsoon · plant Kharif seeds", color: "text-amber-300" };
+    if (month === 10 || month === 11)return { icon: "🍂", label: "Post-monsoon / Rabi prep",          color: "text-orange-300"};
+    if (month <= 3)                  return { icon: "❄️", label: "Winter / Rabi season",               color: "text-cyan-300"  };
+    return                                  { icon: "☀️", label: "Summer / Zaid season",               color: "text-yellow-300"};
+  })();
+
+  // Rainfall bar: scale 0–100 mm → 0–100% width
+  const rainBarPct   = basis.rain7dMm != null ? Math.min(100, (basis.rain7dMm / 100) * 100) : 0;
+  const rainBarColor = (basis.rain7dMm ?? 0) < 5 ? "bg-red-400/60"
+    : (basis.rain7dMm ?? 0) < 20 ? "bg-amber-400/60" : "bg-blue-400/60";
+  const rainLabel    = (basis.rain7dMm ?? 0) < 5  ? { text: "Very dry",     color: "text-red-400"    }
+    : (basis.rain7dMm ?? 0) < 20                  ? { text: "Moderate",     color: "text-amber-400"  }
+    :                                               { text: "Good rainfall", color: "text-blue-400"   };
+
   return (
     <div className="rounded-xl border border-sky-400/15 bg-sky-400/[0.04] p-4">
-      <div className="flex items-center gap-2 mb-3">
-        <span className="text-base">🌤️</span>
-        <span className="text-[11px] uppercase tracking-[0.15em] text-sky-400 font-semibold">
-          Live weather · next {days} days (Open-Meteo)
+      <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
+        <div className="flex items-center gap-2">
+          <span className="text-base">{seasonLabel.icon}</span>
+          <span className="text-[11px] uppercase tracking-[0.15em] text-sky-400 font-semibold">
+            Live weather · next {days} days (Open-Meteo)
+          </span>
+        </div>
+        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full bg-white/[0.06] border border-white/[0.08] ${seasonLabel.color}`}>
+          {seasonLabel.label}
         </span>
       </div>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-        {/* Temperature max */}
         {tempMax && (
           <div className="rounded-lg border border-white/[0.06] bg-white/[0.03] py-2 px-3">
             <div className="text-[9px] uppercase tracking-wider text-slate-500 mb-0.5">Temp max</div>
             <div className={`text-[15px] font-bold ${tempColor}`}>{tempMax}</div>
           </div>
         )}
-        {/* Temperature min */}
         {tempMin && (
           <div className="rounded-lg border border-white/[0.06] bg-white/[0.03] py-2 px-3">
             <div className="text-[9px] uppercase tracking-wider text-slate-500 mb-0.5">Temp min</div>
             <div className="text-[15px] font-bold text-cyan-300">{tempMin}</div>
           </div>
         )}
-        {/* Humidity */}
         {humPct && (
           <div className="rounded-lg border border-white/[0.06] bg-white/[0.03] py-2 px-3">
             <div className="text-[9px] uppercase tracking-wider text-slate-500 mb-0.5">Humidity</div>
             <div className="text-[15px] font-bold text-blue-300">{humPct}</div>
             <div className="mt-1 h-1 w-full rounded-full bg-white/[0.06] overflow-hidden">
-              <div className="h-full rounded-full bg-blue-400/60"
-                   style={{ width: humPct }} />
+              <div className="h-full rounded-full bg-blue-400/60" style={{ width: humPct }} />
             </div>
           </div>
         )}
-        {/* Rainfall */}
         {rain && (
           <div className="rounded-lg border border-white/[0.06] bg-white/[0.03] py-2 px-3">
-            <div className="text-[9px] uppercase tracking-wider text-slate-500 mb-0.5">Rainfall ({days}d)</div>
+            <div className="text-[9px] uppercase tracking-wider text-slate-500 mb-0.5">
+              Rainfall ({days}d forecast)
+            </div>
             <div className="text-[15px] font-bold text-indigo-300">{rain}</div>
+            <div className="mt-1 h-1 w-full rounded-full bg-white/[0.06] overflow-hidden">
+              <div className={`h-full rounded-full ${rainBarColor} transition-all duration-700`}
+                   style={{ width: `${rainBarPct}%` }} />
+            </div>
+            <div className={`text-[9px] mt-0.5 ${rainLabel.color}`}>{rainLabel.text}</div>
           </div>
         )}
       </div>
-      {/* Comfort level note */}
       {tempAvg && (
         <p className="mt-2.5 text-[10px] text-slate-500 leading-relaxed">
-          Avg temp <span className={`font-semibold ${tempColor}`}>{tempAvg}</span>
+          Avg <span className={`font-semibold ${tempColor}`}>{tempAvg}</span>
           {basis.humidity != null && (
             <> · humidity <span className="text-blue-300 font-semibold">{humPct}</span></>
           )}
           {basis.rain7dMm != null && (
-            <> · {basis.rain7dMm < 5 ? "🔴 very dry — consider irrigation" : basis.rain7dMm < 20 ? "🟡 moderate rain" : "🟢 good rainfall"}</>
+            <> · <span className={`font-semibold ${rainLabel.color}`}>
+              {basis.rain7dMm < 5 ? "🔴 very dry — plan irrigation" : basis.rain7dMm < 20 ? "🟡 moderate rain" : "🟢 good for Kharif sowing"}
+            </span></>
           )}
         </p>
       )}
@@ -497,6 +528,7 @@ function ArizePanel({ arize, traceId, modelServed, evalScore, evalDetails, evalJ
   const [arizeStatus, setArizeStatus] = useState<{
     exporterEnabled: boolean; mcpEnabled: boolean; projectName: string;
     otlpEndpoint: string; spaceIdHint: string; batchDelayMs: number;
+    arizeOrgId?: string;
   } | null>(null);
 
   useEffect(() => {
