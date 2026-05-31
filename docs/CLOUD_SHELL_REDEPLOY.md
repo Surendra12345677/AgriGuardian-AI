@@ -84,7 +84,7 @@ Recommended hosted values:
 
 ```dotenv
 GEMINI_MODEL=gemini-3-pro-preview
-GEMINI_FALLBACK_MODELS=gemini-3-flash-preview,gemini-2.5-pro,gemini-2.5-flash,gemini-2.0-flash
+GEMINI_FALLBACK_MODELS=gemini-3-flash-preview
 ARIZE_OTLP_ENDPOINT=https://otlp.arize.com/v1
 ```
 

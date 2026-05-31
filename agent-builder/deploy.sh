@@ -70,10 +70,9 @@ need GEMINI_API_KEY
 need ARIZE_API_KEY
 need ARIZE_SPACE_ID
 GEMINI_MODEL="${GEMINI_MODEL:-gemini-3-pro-preview}"
-# Comma-separated fallback chain — ALL Gemini 3 family.
-# gemini-3-flash-preview = faster/cheaper Gemini 3 (same family)
-# gemini-2.5-pro         = safety net only if Gemini 3 preview is unavailable
-GEMINI_FALLBACK_MODELS="${GEMINI_FALLBACK_MODELS:-gemini-3-flash-preview,gemini-2.5-pro}"
+# Gemini 3 only — gemini-3-flash-preview is the faster/cheaper Gemini 3 model.
+# No non-Gemini-3 fallbacks: requirement is Gemini 3 throughout.
+GEMINI_FALLBACK_MODELS="${GEMINI_FALLBACK_MODELS:-gemini-3-flash-preview}"
 ARIZE_OTLP_ENDPOINT="${ARIZE_OTLP_ENDPOINT:-https://otlp.arize.com/v1}"
 
 echo "==> Project=$PROJECT_ID  Region=$REGION"

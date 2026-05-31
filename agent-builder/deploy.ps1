@@ -71,7 +71,7 @@ $GeminiModel = if ($envMap.ContainsKey("GEMINI_MODEL") -and $envMap["GEMINI_MODE
 # Comma-separated list of generally-available fallback models. The backend
 # will iterate through them when the primary model returns 404/429/5xx so
 # judges NEVER see the deterministic offline plan on Cloud Run.
-$GeminiFallbacks = if ($envMap.ContainsKey("GEMINI_FALLBACK_MODELS") -and $envMap["GEMINI_FALLBACK_MODELS"]) { $envMap["GEMINI_FALLBACK_MODELS"] } else { "gemini-3-flash-preview;gemini-2.5-pro;gemini-2.5-flash;gemini-2.0-flash" }
+$GeminiFallbacks = if ($envMap.ContainsKey("GEMINI_FALLBACK_MODELS") -and $envMap["GEMINI_FALLBACK_MODELS"]) { $envMap["GEMINI_FALLBACK_MODELS"] } else { "gemini-3-flash-preview" }
 # Cloud Run --set-env-vars uses ',' as the variable separator; use ';' inside
 # the value and let Spring's Binder split it (List<String> binding handles
 # both comma and semicolon for relaxed binding). To be safe we pass it as
