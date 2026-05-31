@@ -236,6 +236,12 @@ public class AgentOrchestrator {
                 planSpan.setAttribute(AttributeKey.stringArrayKey("plan.tools"), plan);
             } finally { planSpan.end(); }
 
+            // Compute date/season up-front — needed both for the market tool harvest-date
+            // calculation and later for the user prompt construction.
+            java.time.ZoneId IST_EARLY = java.time.ZoneId.of("Asia/Kolkata");
+            java.time.LocalDate today = java.time.LocalDate.now(IST_EARLY);
+            int currentMonth = today.getMonthValue();
+
             // ── tools (parallel) ────────────────────────────────────────────
             // All plan tools are independent — run them concurrently so the
             // total tool-phase latency equals the slowest single call rather
@@ -260,6 +266,17 @@ public class AgentOrchestrator {
                 args.put("crop",      req.preferredCrop() == null ? "" : req.preferredCrop());
                 if (farmSoil  != null) args.put("soilType",          farmSoil);
                 if (farmWater != null) args.put("waterAvailability", farmWater);
+                if ("market".equals(toolName)) {
+                    // Pass projected HARVEST date so market prices reflect what the
+                    // farmer will see at selling time, not at planting time.
+                    // KHARIF (Jun–Oct): harvest ~4 months after sowing
+                    // RABI  (Nov–Mar): harvest ~4 months after sowing
+                    // ZAID  (Apr–May): short-season crops, harvest ~2 months out
+                    int harvestMonthsAhead = (currentMonth >= 6 && currentMonth <= 10) ? 4
+                            : (currentMonth == 11 || currentMonth == 12 || currentMonth <= 3) ? 4
+                            : 2;
+                    args.put("date", today.plusMonths(harvestMonthsAhead).toString());
+                }
                 if ("arize.mcp".equals(toolName)) {
                     args.put("operation", "search_traces");
                     args.put("query",
@@ -372,66 +389,64 @@ public class AgentOrchestrator {
             };
 
             String systemPrompt = """
-                    You are AgriGuardian, a careful agronomy advisor for smallholder Indian farmers.
-                    Produce a SEASON PLAN that maximises farmer income while respecting water and soil limits.
-                    Reply ONLY as compact valid JSON (no markdown fences) with EXACTLY these keys:
-                      "advice"     : string, 2-3 sentences in %s
-                      "crop"       : string, the recommended crop
-                      "tasks"      : array of {"day": int, "action": string, "why": string}
-                      "confidence" : float between 0 and 1
-                      "impact"     : { "expectedRevenueInr": int, "extraIncomeInr": int,
-                                       "yieldDeltaPct": int, "waterSavingsPct": int,
-                                       "costInr": int, "paybackWeeks": int }
-                      "risks"      : array of strings (top 3 risks for this scenario)
-                    Apply scenario stress-tests: if scenario is DROUGHT, prefer drought-tolerant crops and
-                    drip irrigation; PRICE_CRASH → diversify; PEST_OUTBREAK → resistant varieties + IPM.
+                    You are AgriGuardian, a knowledgeable agronomy advisor for smallholder farmers worldwide.
+                    Use your deep agricultural expertise to give the BEST crop recommendation for the specific
+                    farm location, soil type, weather, season and market conditions provided in the context.
 
-                    CROP CHOICE RULES — read carefully, this is the most common failure mode:
-                      • DO NOT default to "maize" just because it is a safe answer. Maize is only correct
-                        when the soil is loam/black, the kharif monsoon is active (June–October), and rainfall
-                        in the next 7 days is between 8 and 35 mm. In any other situation, pick a different crop.
-                      • Honour the AGRONOMIC SEASON for the current month at this latitude:
-                            – Kharif (Jun–Oct): rice, soybean, cotton, pigeon pea, groundnut, sorghum,
-                              pearl millet, green gram, black gram, sesame, maize.
-                            – Rabi (Nov–Mar): wheat, mustard, chickpea, barley, potato, tomato, garlic,
-                              onion, safflower, linseed, peas.
-                            – Zaid (Apr–May): watermelon, muskmelon, cucumber, fodder maize, sunflower,
-                              green gram, summer rice (clay only), bottle gourd.
-                      • Honour SOIL: sandy → groundnut/pearl millet/mustard/cumin; clay/black → cotton/
-                        soybean/pigeon pea/chickpea/rice; loam → vegetables, maize, wheat, pulses; red →
-                        ragi, groundnut, pulses.
-                      • Honour LATITUDE for rabi: lat ≥ 24 favours wheat/mustard/barley; 18–24 favours
-                        chickpea/wheat/safflower; <18 favours chickpea/ragi/onion/vegetables.
-                      • If a candidate shortlist is provided in the user prompt, your "crop" MUST be one
-                        of those candidates unless preferredCrop is set.
-                      • If preferredCrop IS set, use it as-is; do not override.
+                    Reply ONLY as valid compact JSON (no markdown, no prose outside JSON) with EXACTLY these keys:
+                      "advice"     : string — 2-3 sentences in %s explaining WHY this crop fits this specific farm
+                      "crop"       : string — the single best crop name for this farm right now
+                      "tasks"      : array of 5-8 objects: {"day":int,"action":string,"why":string}
+                      "confidence" : float 0.0–1.0 — your confidence in this recommendation
+                      "impact"     : {"expectedRevenueInr":int,"extraIncomeInr":int,"yieldDeltaPct":int,
+                                      "waterSavingsPct":int,"costInr":int,"paybackWeeks":int}
+                      "risks"      : array of exactly 3 strings — top risks specific to this crop/location/season
 
-                    The "impact" object MUST be internally consistent — these invariants are enforced:
-                      • extraIncomeInr  ≈ expectedRevenueInr × yieldDeltaPct / 100   (within ±10%%)
-                      • waterSavingsPct > 0 whenever any task mentions drip / mulch / irrigation scheduling
-                      • paybackWeeks    = ceil( costInr ÷ ( extraIncomeInr ÷ cycleWeeks ) ),
-                                          where cycleWeeks = ceil(maxTaskDay / 7)
-                    Do NOT round so aggressively that these break. The server validates and will
-                    silently correct any field that violates them.
+                    RECOMMENDATION PRINCIPLES (apply your own knowledge, not a fixed list):
+                      • Use the candidateShortlist and locationAnchorCrop in the user prompt as strong guidance —
+                        these are computed from the farm's exact coordinates, soil, season and weather.
+                      • If preferredCrop is set by the farmer, use it — respect the farmer's choice.
+                      • Ground all numbers in the weather, soil and market data from the Context section.
+                      • Your advice must reflect the actual soil type, rainfall forecast and current season.
+                      • Apply scenario adjustments: DROUGHT → water-efficient crops + drip irrigation tasks;
+                        PRICE_CRASH → diversify away from volatile commodities; PEST_OUTBREAK → resistant
+                        varieties + Integrated Pest Management tasks.
+
+                    IMPACT consistency rules:
+                      • extraIncomeInr must be approximately expectedRevenueInr × yieldDeltaPct / 100 (±10%%)
+                      • waterSavingsPct must be > 0 if any task mentions drip irrigation, mulching or scheduling
+                      • paybackWeeks = ceil(costInr ÷ (extraIncomeInr ÷ cropCycleWeeks))
                     """.formatted(langName);
 
             // Compute the agronomic season + curated candidate shortlist server-side
             // and inject it into the user prompt. Without this, Gemini consistently
             // defaults to "maize" because the model has no notion of the current
             // calendar month or the agronomic cycle of this lat/lon.
-            int currentMonth = java.time.LocalDate.now().getMonthValue();
+            // today / currentMonth already declared above (hoisted for market tool).
+            int currentDay   = today.getDayOfMonth();
+            int currentYear  = today.getYear();
+            String todayStr  = today.format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE); // e.g. 2026-05-31
             String season =
                     (currentMonth >= 6 && currentMonth <= 10) ? "KHARIF (monsoon sowing)"
                   : (currentMonth == 11 || currentMonth == 12 || currentMonth <= 3) ? "RABI (winter sowing)"
                   : "ZAID (short summer crops)";
             // Pull rainfall + soil out of the tool outputs so the shortlist is honest.
-            double rain7 = 12.0;
+            double rain7    = 12.0;
+            double tempMaxC = 33.0;
+            double tempMinC = 23.0;
+            double tempAvgC = 28.0;
+            double humidity = 0.62;
+            int    forecastDays = 7;
             String soilHint = farmSoil != null && !farmSoil.isBlank() ? farmSoil : "loam";
             try {
                 Object weatherOut = toolOutputs.get("weather");
                 if (weatherOut instanceof Map<?, ?> w) {
-                    Object r = w.get("rainfallMmNext7d");
-                    if (r instanceof Number n) rain7 = n.doubleValue();
+                    if (w.get("rainfallMmNext7d") instanceof Number n) rain7       = n.doubleValue();
+                    if (w.get("tempMaxC")          instanceof Number n) tempMaxC   = n.doubleValue();
+                    if (w.get("tempMinC")          instanceof Number n) tempMinC   = n.doubleValue();
+                    if (w.get("tempAvgC")          instanceof Number n) tempAvgC   = n.doubleValue();
+                    if (w.get("humidity")          instanceof Number n) humidity   = n.doubleValue();
+                    if (w.get("forecastDays")      instanceof Number n) forecastDays = n.intValue();
                 }
                 // Only override the farm-record soil if no farm soil was supplied.
                 if (farmSoil == null || farmSoil.isBlank()) {
@@ -460,20 +475,49 @@ public class AgentOrchestrator {
                     req.longitude() == null ? 0.0 : req.longitude(),
                     currentMonth);
 
-            String userPrompt = "Farm " + req.farmId() +
-                    " | latitude=" + req.latitude() +
-                    " | longitude=" + req.longitude() +
-                    " | currentMonth=" + currentMonth + " (" + season + ")" +
-                    " | scenario=" + (req.scenario() == null ? "BASELINE" : req.scenario()) +
-                    " | preferredCrop=" + (req.preferredCrop() == null ? "(none — choose the best for this lat/lon, soil and weather)" : req.preferredCrop()) +
-                    " | candidateShortlist=" + shortlist +
-                    " | locationAnchorCrop=" + anchorCrop +
-                    " | language=" + langName +
-                    "\nUse the weather, soil and market tool outputs in Context to ground every figure. " +
-                    "If preferredCrop is empty, prefer locationAnchorCrop unless the soil + 7-day rainfall " +
-                    "strongly favour a different entry from candidateShortlist. The anchor is derived from " +
-                    "the exact lat/lon so two different farms MUST get different recommendations. " +
-                    "Do NOT pick maize unless it actually appears in candidateShortlist.";
+            // Build a rich, context-grounded user prompt. All decision-relevant
+            // data (date, location, soil, weather, market, shortlist) is injected
+            // here so Gemini can apply its full agricultural intelligence —
+            // not a hardcoded rulebook.
+            String userPrompt = """
+                    FARM CONTEXT
+                    ============
+                    Farm ID   : %s
+                    Date      : %s (IST)  |  Season: %s
+                    Location  : lat=%s, lon=%s
+                    Soil type : %s (%s)
+                    Rainfall  : %.1f mm forecast (next 7 days)
+                    Scenario  : %s
+                    Farmer preference: %s
+                    Reply language: %s
+
+                    DECISION GUIDANCE (computed from this farm's exact coordinates + live data)
+                    ============================================================================
+                    candidateShortlist  = %s
+                    locationAnchorCrop  = %s   ← derived deterministically from lat/lon so each farm
+                                                   gets a unique recommendation; use this unless the
+                                                   live soil/weather data strongly suggests another crop.
+
+                    INSTRUCTIONS
+                    ============
+                    1. Choose the BEST single crop from candidateShortlist for this farm right now.
+                    2. If farmer preference is set, use it as the crop.
+                    3. Use the weather, soil and market data in the Context section to make every
+                       figure in "impact" realistic and grounded — not generic.
+                    4. Write advice that mentions the actual soil type, rainfall and season.
+                    5. Tasks must be day-numbered and actionable for this specific crop and soil.
+                    """.formatted(
+                            req.farmId(),
+                            todayStr, season,
+                            req.latitude(), req.longitude(),
+                            soilHint, farmSoil != null && !farmSoil.isBlank() ? "farm record" : "geo-estimated",
+                            rain7,
+                            req.scenario() == null ? "BASELINE" : req.scenario(),
+                            req.preferredCrop() == null ? "(none — choose best from shortlist)" : req.preferredCrop(),
+                            langName,
+                            shortlist,
+                            anchorCrop
+                    );
 
             String advice = gemini.generate(systemPrompt, userPrompt, ctx);
 
@@ -488,18 +532,24 @@ public class AgentOrchestrator {
                 try (var s = fast.makeCurrent()) {
                     fast.setAttribute(AttributeKey.stringKey("skip.reason"), "prior_excellence");
                     String reconciled = reconcileImpact(advice);
-                    reflected = injectBasis(reconciled, Map.of(
-                            "season",     season,
-                            "month",      currentMonth,
-                            "latitude",   req.latitude(),
-                            "longitude",  req.longitude(),
-                            "soil",       soilHint,
-                            "soilSource", farmSoil != null && !farmSoil.isBlank() ? "farm-record" : "geo-heuristic",
-                            "rain7dMm",   rain7,
-                            "shortlist",  shortlist,
-                            "anchorCrop", anchorCrop,
-                            "fastPath",   true
-                    ));
+                    java.util.LinkedHashMap<String, Object> fastBasis = new java.util.LinkedHashMap<>();
+                    fastBasis.put("date",        todayStr);
+                    fastBasis.put("season",      season);
+                    fastBasis.put("month",       currentMonth);
+                    fastBasis.put("latitude",    req.latitude());
+                    fastBasis.put("longitude",   req.longitude());
+                    fastBasis.put("soil",        soilHint);
+                    fastBasis.put("soilSource",  farmSoil != null && !farmSoil.isBlank() ? "farm-record" : "geo-heuristic");
+                    fastBasis.put("rain7dMm",    rain7);
+                    fastBasis.put("tempMaxC",    tempMaxC);
+                    fastBasis.put("tempMinC",    tempMinC);
+                    fastBasis.put("tempAvgC",    tempAvgC);
+                    fastBasis.put("humidity",    humidity);
+                    fastBasis.put("forecastDays",forecastDays);
+                    fastBasis.put("shortlist",   shortlist);
+                    fastBasis.put("anchorCrop",  anchorCrop);
+                    fastBasis.put("fastPath",    true);
+                    reflected = injectBasis(reconciled, fastBasis);
                 } finally { fast.end(); }
             } else {
                 Span reflectSpan = tracer.spanBuilder("reflector.reflect").startSpan();
@@ -508,21 +558,29 @@ public class AgentOrchestrator {
                         reflectSpan.setAttribute(AttributeKey.stringKey("reflect.mode"), "deep");
                     }
                     String reconciled = reconcileImpact(advice);
-                    reflected = injectBasis(reconciled, Map.of(
-                            "season",     season,
-                            "month",      currentMonth,
-                            "latitude",   req.latitude(),
-                            "longitude",  req.longitude(),
-                            "soil",       soilHint,
-                            "soilSource", farmSoil != null && !farmSoil.isBlank() ? "farm-record" : "geo-heuristic",
-                            "rain7dMm",   rain7,
-                            "shortlist",  shortlist,
-                            "anchorCrop", anchorCrop
-                    ));
+                    java.util.LinkedHashMap<String, Object> basis = new java.util.LinkedHashMap<>();
+                    basis.put("date",        todayStr);
+                    basis.put("season",      season);
+                    basis.put("month",       currentMonth);
+                    basis.put("latitude",    req.latitude());
+                    basis.put("longitude",   req.longitude());
+                    basis.put("soil",        soilHint);
+                    basis.put("soilSource",  farmSoil != null && !farmSoil.isBlank() ? "farm-record" : "geo-heuristic");
+                    basis.put("rain7dMm",    rain7);
+                    basis.put("tempMaxC",    tempMaxC);
+                    basis.put("tempMinC",    tempMinC);
+                    basis.put("tempAvgC",    tempAvgC);
+                    basis.put("humidity",    humidity);
+                    basis.put("forecastDays",forecastDays);
+                    basis.put("shortlist",   shortlist);
+                    basis.put("anchorCrop",  anchorCrop);
+                    reflected = injectBasis(reconciled, basis);
                 } finally { reflectSpan.end(); }
             }
 
-            // ── persist ─────────────────────────────────────────────────────
+            // ── crop fallback: if Gemini omitted the "crop" field, inject anchorCrop
+            // so the UI never shows "RECOMMENDED CROP · —"
+            reflected = ensureCropPresent(reflected, anchorCrop);
             // Save immediately so the user gets a response at once.
             // evalScore / evalDetails are filled by the async evaluator below.
             Recommendation rec = Recommendation.builder()
@@ -540,6 +598,7 @@ public class AgentOrchestrator {
             root.setAttribute(AttributeKey.stringKey("agent.recommendation.id"), saved.getId());
             root.setAttribute(AttributeKey.longKey("agent.plan.steps"),          (long) plan.size());
             root.setAttribute(AttributeKey.stringKey("agent.season"),            season);
+            root.setAttribute(AttributeKey.stringKey("agent.date.ist"),          todayStr);
             root.setAttribute(AttributeKey.stringKey("agent.soil.hint"),         soilHint);
 
             // Cache immediately — only live (non-offline) results.
@@ -562,12 +621,13 @@ public class AgentOrchestrator {
                 final Map<String, Object> toolSnap   = Map.copyOf(toolOutputs);
                 final String traceIdStr = root.getSpanContext().getTraceId();
                 final String scenarioStr = req.scenario() == null ? "BASELINE" : req.scenario();
+                final String reflectedSnap = reflected;   // capture for lambda (reflected is reassigned above)
                 final io.opentelemetry.context.Context evalOtelCtx =
                         io.opentelemetry.context.Context.current();
 
                 CompletableFuture.runAsync(() -> {
                     try (io.opentelemetry.context.Scope sc = evalOtelCtx.makeCurrent()) {
-                        AgentEvaluator.EvalResult er = evaluator.evaluate(reflected, toolSnap);
+                        AgentEvaluator.EvalResult er = evaluator.evaluate(reflectedSnap, toolSnap);
                         // Persist eval score on the recommendation.
                         repo.findById(savedId).ifPresent(r -> {
                             r.setEvalScore(er.aggregate());
@@ -758,11 +818,31 @@ public class AgentOrchestrator {
     private static String lower(String s) { return s == null ? "" : s.toLowerCase(); }
 
     /**
+     * Ensures the JSON payload has a non-blank "crop" field.
+     * If Gemini omitted it, we fall back to {@code fallbackCrop} so the UI never
+     * shows "RECOMMENDED CROP · —".
+     */
+    String ensureCropPresent(String raw, String fallbackCrop) {
+        if (raw == null || raw.isBlank() || fallbackCrop == null || fallbackCrop.isBlank()) return raw;
+        try {
+            JsonNode root = JSON.readTree(raw.trim());
+            if (!root.isObject()) return raw;
+            ObjectNode obj = (ObjectNode) root;
+            String crop = obj.path("crop").asText("").trim();
+            if (crop.isEmpty() || crop.equals("null")) {
+                log.warn("Gemini omitted 'crop' field — injecting anchorCrop={}", fallbackCrop);
+                obj.put("crop", fallbackCrop);
+                return JSON.writeValueAsString(obj);
+            }
+        } catch (Exception ignored) { /* return raw if unparseable */ }
+        return raw;
+    }
+
+    /**
      * Stamp a {@code _basis} object onto the JSON payload so the UI can render a
      * "Why this crop?" panel. Silently no-ops on unparseable payloads.
      */
-    String injectBasis(String raw, Map<String, Object> basis) {
-        if (raw == null || raw.isBlank() || basis == null || basis.isEmpty()) return raw;
+    String injectBasis(String raw, Map<String, Object> basis) {        if (raw == null || raw.isBlank() || basis == null || basis.isEmpty()) return raw;
         try {
             String trimmed = raw.trim();
             if (trimmed.startsWith("```")) {

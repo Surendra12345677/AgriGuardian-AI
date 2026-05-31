@@ -74,16 +74,21 @@ public class MarketPriceTool implements AgentTool {
         String systemPrompt = blankToDefault(props.getLivePriceSystemPrompt(),
                 "You are an agricultural commodity market analyst with up-to-date knowledge of "
                 + "Indian mandi wholesale prices and global commodity exchanges. "
+                + "The date you receive is the PROJECTED HARVEST DATE — your job is to forecast the "
+                + "expected price at that future date, not today's price. "
                 + "Always respond with only a single valid JSON object — no markdown, no explanation.");
 
         String userPromptTemplate = blankToDefault(props.getLivePriceUserPromptTemplate(),
-                "What is the current wholesale market price (INR per quintal) for {crop} in India as of {date}? "
-                + "Provide the short-term price trend (rising, stable, or falling), the month when the crop "
-                + "typically commands peak prices, and the recommended sell window (two consecutive month names). "
+                "A smallholder farmer in India is planting {crop} today and expects to HARVEST around {date}. "
+                + "What wholesale market price (INR per quintal) should the farmer expect at harvest time "
+                + "in India around {date}? "
+                + "Provide the price trend at that time (rising, stable, or falling), the month when the crop "
+                + "typically commands peak prices, and the best sell window for maximum profit (two consecutive month names). "
                 + "Return ONLY this JSON (no other text):\n"
                 + "{\"crop\":\"{crop}\",\"pricePerQuintalINR\":<integer>,\"trend\":\"rising|stable|falling\","
                 + "\"peakMonth\":\"<MONTH_UPPERCASE>\",\"recommendedSellWindow\":\"<MONTH>–<MONTH>\","
-                + "\"asOfDate\":\"{date}\",\"marketInsight\":\"<one-sentence demand/supply driver>\"}");
+                + "\"asOfDate\":\"{date}\",\"harvestPriceForecast\":true,"
+                + "\"marketInsight\":\"<one-sentence demand/supply outlook at harvest time>\"}");
 
         String userPrompt = userPromptTemplate.replace("{crop}", crop).replace("{date}", date.toString());
 

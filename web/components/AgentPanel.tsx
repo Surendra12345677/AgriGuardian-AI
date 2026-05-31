@@ -27,6 +27,11 @@ type Parsed = {
     soil?: string;
     soilSource?: string;
     rain7dMm?: number;
+    tempMaxC?: number;
+    tempMinC?: number;
+    tempAvgC?: number;
+    humidity?: number;
+    forecastDays?: number;
     shortlist?: string[];
     anchorCrop?: string;
   };
@@ -57,6 +62,7 @@ export default function AgentPanel({
   const elapsedRef  = useRef<ReturnType<typeof setInterval> | null>(null);
   const evalPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const resultRef   = useRef<HTMLDivElement | null>(null);
+  const resultCardRef = useRef<HTMLDivElement | null>(null);
 
   // Track which farm the currently-displayed result belongs to. When the
   // user switches the active farm in the FarmContextBar above (same
@@ -83,13 +89,13 @@ export default function AgentPanel({
   // Cleanup eval poll on unmount
   useEffect(() => { return () => { if (evalPollRef.current) clearInterval(evalPollRef.current); }; }, []);
 
-  // Auto-scroll to result when recommendation arrives so the user doesn't
-  // have to scroll back up after waiting 25-30 s for Gemini.
+  // Auto-scroll to the ResultCard (not just the grid wrapper) so on mobile/tablet
+  // the user sees the actual result, not just the AgentTrace panel above it.
   useEffect(() => {
-    if (rec && resultRef.current) {
+    if (rec && resultCardRef.current) {
       setTimeout(() => {
-        resultRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-      }, 100);
+        resultCardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 150);
     }
   }, [rec?.id]); // only scroll on new rec, not on eval updates
 
@@ -324,17 +330,19 @@ export default function AgentPanel({
           </div>
           <div>
             {rec ? (
-              <ResultCard
-                view={view}
-                rec={rec}
-                latencyMs={latencyMs}
-                conf={conf}
-                noStructured={noStructured}
-                busy={busy}
-                evalPending={evalPending}
-                onAsk={ask}
-                onSetCrop={setCrop}
-              />
+              <div ref={resultCardRef}>
+                <ResultCard
+                  view={view}
+                  rec={rec}
+                  latencyMs={latencyMs}
+                  conf={conf}
+                  noStructured={noStructured}
+                  busy={busy}
+                  evalPending={evalPending}
+                  onAsk={ask}
+                  onSetCrop={setCrop}
+                />
+              </div>
             ) : (
               <div className="card p-5 space-y-3">
                 <Skeleton h="h-5 w-1/3" />
@@ -398,6 +406,77 @@ function ConfidenceRing({ value }: { value: number }) {
       <div className="absolute inset-0 grid place-items-center text-sm font-bold text-emerald-300">
         {loading ? "…" : `${Math.round(pct * 100)}%`}
       </div>
+    </div>
+  );
+}
+
+// ─── Weather snapshot widget ─────────────────────────────────────────────────
+function WeatherWidget({ basis }: { basis: NonNullable<Parsed["_basis"]> }) {
+  const tempMax  = basis.tempMaxC  != null ? `${basis.tempMaxC.toFixed(1)}°C`  : null;
+  const tempMin  = basis.tempMinC  != null ? `${basis.tempMinC.toFixed(1)}°C`  : null;
+  const tempAvg  = basis.tempAvgC  != null ? `${basis.tempAvgC.toFixed(1)}°C`  : null;
+  const humPct   = basis.humidity  != null ? `${Math.round(basis.humidity * 100)}%` : null;
+  const rain     = basis.rain7dMm  != null ? `${Math.round(basis.rain7dMm)} mm` : null;
+  const days     = basis.forecastDays ?? 7;
+
+  const tempColor = (basis.tempAvgC ?? 28) > 35
+    ? "text-orange-300" : (basis.tempAvgC ?? 28) > 25
+    ? "text-amber-200" : "text-cyan-300";
+
+  return (
+    <div className="rounded-xl border border-sky-400/15 bg-sky-400/[0.04] p-4">
+      <div className="flex items-center gap-2 mb-3">
+        <span className="text-base">🌤️</span>
+        <span className="text-[11px] uppercase tracking-[0.15em] text-sky-400 font-semibold">
+          Live weather · next {days} days (Open-Meteo)
+        </span>
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        {/* Temperature max */}
+        {tempMax && (
+          <div className="rounded-lg border border-white/[0.06] bg-white/[0.03] py-2 px-3">
+            <div className="text-[9px] uppercase tracking-wider text-slate-500 mb-0.5">Temp max</div>
+            <div className={`text-[15px] font-bold ${tempColor}`}>{tempMax}</div>
+          </div>
+        )}
+        {/* Temperature min */}
+        {tempMin && (
+          <div className="rounded-lg border border-white/[0.06] bg-white/[0.03] py-2 px-3">
+            <div className="text-[9px] uppercase tracking-wider text-slate-500 mb-0.5">Temp min</div>
+            <div className="text-[15px] font-bold text-cyan-300">{tempMin}</div>
+          </div>
+        )}
+        {/* Humidity */}
+        {humPct && (
+          <div className="rounded-lg border border-white/[0.06] bg-white/[0.03] py-2 px-3">
+            <div className="text-[9px] uppercase tracking-wider text-slate-500 mb-0.5">Humidity</div>
+            <div className="text-[15px] font-bold text-blue-300">{humPct}</div>
+            <div className="mt-1 h-1 w-full rounded-full bg-white/[0.06] overflow-hidden">
+              <div className="h-full rounded-full bg-blue-400/60"
+                   style={{ width: humPct }} />
+            </div>
+          </div>
+        )}
+        {/* Rainfall */}
+        {rain && (
+          <div className="rounded-lg border border-white/[0.06] bg-white/[0.03] py-2 px-3">
+            <div className="text-[9px] uppercase tracking-wider text-slate-500 mb-0.5">Rainfall ({days}d)</div>
+            <div className="text-[15px] font-bold text-indigo-300">{rain}</div>
+          </div>
+        )}
+      </div>
+      {/* Comfort level note */}
+      {tempAvg && (
+        <p className="mt-2.5 text-[10px] text-slate-500 leading-relaxed">
+          Avg temp <span className={`font-semibold ${tempColor}`}>{tempAvg}</span>
+          {basis.humidity != null && (
+            <> · humidity <span className="text-blue-300 font-semibold">{humPct}</span></>
+          )}
+          {basis.rain7dMm != null && (
+            <> · {basis.rain7dMm < 5 ? "🔴 very dry — consider irrigation" : basis.rain7dMm < 20 ? "🟡 moderate rain" : "🟢 good rainfall"}</>
+          )}
+        </p>
+      )}
     </div>
   );
 }
@@ -480,12 +559,12 @@ function ArizePanel({ arize, traceId, modelServed, evalScore, evalDetails, evalJ
           <span className="text-[10px] text-slate-500">{spanCount} spans · OTLP</span>
           {/* Score pill */}
           {scorePill && <>{scorePill}</>}
-          {/* Expand hint */}
-          <span className="ml-auto text-[10px] text-slate-600 group-open:hidden">
-            View Arize details ›
+          {/* Expand hint — explicit chevron so judges clearly see it's clickable */}
+          <span className="ml-auto flex items-center gap-1 text-[10px] text-violet-300 font-medium group-open:hidden">
+            View Arize details <span className="text-[8px]">▼</span>
           </span>
-          <span className="ml-auto text-[10px] text-slate-600 hidden group-open:inline">
-            ‹ Hide
+          <span className="ml-auto flex items-center gap-1 text-[10px] text-violet-300 font-medium hidden group-open:inline-flex">
+            Hide details <span className="text-[8px]">▲</span>
           </span>
         </div>
       </summary>
@@ -756,6 +835,11 @@ function ResultCard({
           </div>
         )}
 
+        {/* ③b Weather snapshot — always shown when basis has weather data */}
+        {view._basis && (view._basis.tempMaxC != null || view._basis.humidity != null) && (
+          <WeatherWidget basis={view._basis} />
+        )}
+
         {/* ④ Why this crop · Location basis — always expanded */}
         {view._basis && (
           <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-4 space-y-3">
@@ -773,7 +857,7 @@ function ResultCard({
               <BasisCell k="Date (IST)"   v={view._basis.date ?? new Date().toISOString().slice(0,10)} />
               <BasisCell k="Season"       v={view._basis.season ?? "—"} />
               <BasisCell k="Soil"         v={`${view._basis.soil ?? "?"}${view._basis.soilSource === "farm-record" ? " (your farm)" : " (geo)"}`} />
-              <BasisCell k="Rain (7d)"    v={view._basis.rain7dMm != null ? `${Math.round(view._basis.rain7dMm)} mm` : "—"} />
+              <BasisCell k={`Rain (${view._basis.forecastDays ?? 7}d)`}  v={view._basis.rain7dMm != null ? `${Math.round(view._basis.rain7dMm)} mm` : "—"} />
             </div>
             {/* Location anchor */}
             {view._basis.anchorCrop && (

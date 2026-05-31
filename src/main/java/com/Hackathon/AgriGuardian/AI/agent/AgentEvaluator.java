@@ -124,44 +124,56 @@ public class AgentEvaluator {
 
     private EvalResult evaluateWithJudge(String recommendationJson, Map<String, Object> ctx) {
         String judgeSystem = """
-            You are a STRICT evaluator for an AI agronomy planning agent. Your job is to score
-            the agent's recommendation JSON against the real tool data it was given.
-            Return ONLY compact JSON with no markdown fences:
+            You are a STRICT, CALIBRATED evaluator for an AI agronomy planning agent.
+            Score the recommendation JSON against the real tool data provided.
+            Return ONLY compact JSON — no markdown, no prose outside the JSON:
               {"relevance":0..1,"groundedness":0..1,"agronomic_correctness":0..1,
-               "hallucination_risk":0..1,"reason":"<25 words max>"}
+               "hallucination_risk":0..1,"reason":"<30 words>"}
 
-            SCORING RUBRIC (be strict — do NOT inflate scores):
+            ⚠ CALIBRATION MANDATE — read carefully before scoring:
+            • Scores of ALL 1.0 are FORBIDDEN unless you can prove, sentence-by-sentence,
+              that every field is perfect. In practice, expect 0.75–0.88 for a good plan.
+            • You MUST deduct at least 0.08 from ANY dimension that has even one imperfect
+              element. Do not round up; round DOWN if in doubt.
+            • If you catch yourself writing all four values ≥ 0.95, STOP and re-score more
+              critically — you are almost certainly being too generous.
+
+            SCORING RUBRIC (apply strictly):
 
             relevance (0..1):
-              1.0 = plan directly addresses the farm's soil, coordinates, season, and scenario
-              0.7 = plan is generally appropriate but misses one farm-specific detail
-              0.4 = plan is generic, could apply to any farm
-              0.0 = plan is irrelevant or empty
+              0.88 = plan mentions the actual soil type, season, and location — typical ceiling
+              0.70 = plan is generally correct but omits one farm-specific detail
+              0.50 = plan is mostly generic — could apply to any farm in the country
+              0.20 = plan ignores the farm context entirely
+              Deduct 0.10 if advice text does NOT mention the soil type from context.
+              Deduct 0.10 if the tasks are generic day numbers (1,2,3...) with no crop logic.
 
             groundedness (0..1):
-              1.0 = all impact numbers (revenue, yield%, cost, payback) are plausible given
-                    the weather and market tool data; no impossible figures
-              0.7 = numbers are roughly consistent with tool data (±30%)
-              0.4 = numbers appear fabricated or contradict tool data
-              0.0 = completely made-up figures with no basis in tool outputs
+              0.85 = all impact numbers plausible given weather + market tool data
+              0.65 = revenue/yield within 40% of what tool data suggests
+              0.40 = numbers contradict tool data (e.g. ₹2L revenue for 1-acre sesame)
+              0.10 = entirely fabricated figures
+              Deduct 0.15 if expectedRevenueInr > ₹3,00,000 for a 2-acre farm.
+              Deduct 0.10 if paybackWeeks < 2 or > 52.
 
             agronomic_correctness (0..1):
-              1.0 = recommended crop is ideal for this EXACT season + soil type + latitude
-                    (e.g. watermelon for ZAID + sandy soil at 23°N is 1.0)
-              0.7 = crop is acceptable but not the best fit (wrong soil or borderline season)
-              0.4 = crop is a poor fit (wrong season or soil)
-              0.0 = crop recommendation is agronomically wrong (e.g. wheat in peak monsoon)
+              0.90 = crop is ideal for season + soil + latitude AND market is priced at harvest date
+              0.72 = crop is good but not optimal, OR market timing is slightly off (< 30 days)
+              0.50 = crop is marginal (grows but not ideal for this soil/season)
+              0.20 = crop is wrong season (e.g. wheat recommended in June monsoon)
+              Deduct 0.20 if the crop is NOT in the validShortlist provided in context.
+              Deduct 0.15 if marketAsOfDate == plantingDate (agent priced at planting, not harvest).
 
             hallucination_risk (0..1):
-              1.0 = no fabricated facts — every claim traceable to tool data or known agronomy
-              0.7 = minor unsupported claims (e.g. exact pesticide name without source)
-              0.4 = significant fabrications (invented mandi prices, non-existent schemes)
-              0.0 = entire plan appears fabricated
+              0.90 = all claims traceable to tool data or standard agronomic knowledge
+              0.70 = one or two unsupported specific claims (pesticide names, exact subsidy amounts)
+              0.40 = invented mandi prices, non-existent government schemes, wrong crop varieties
+              0.10 = majority of plan is fabricated
 
-            If the JSON contains "_source":"offline-fallback", score relevance=0.6,
-            groundedness=0.7, agronomic_correctness=0.7, hallucination_risk=0.9 (offline
-            plans are deterministic so they don't hallucinate, but aren't Gemini-personalised).
+            Offline-fallback override: if "_source":"offline-fallback" is present, set
+            relevance=0.60, groundedness=0.68, agronomic_correctness=0.68, hallucination_risk=0.88.
             """;
+
 
         Map<String, Object> evalCtx = new LinkedHashMap<>();
         evalCtx.put("recommendation", recommendationJson);
@@ -170,6 +182,41 @@ public class AgentEvaluator {
             evalCtx.put("soil",    ctx.get("soil"));
             evalCtx.put("market",  ctx.get("market"));
         }
+
+        // Extract _basis (season, shortlist, harvest date, weather) from the recommendation JSON
+        // and inject into eval context so the judge can properly score agronomic correctness
+        // and market timing. Without this, the judge scores blindly and inflates to 1.0.
+        try {
+            if (recommendationJson != null) {
+                Matcher bm = JSON_OBJECT.matcher(recommendationJson);
+                if (bm.find()) {
+                    JsonNode rec = JSON.readTree(bm.group());
+                    JsonNode basis = rec.path("_basis");
+                    if (basis.isObject()) {
+                        evalCtx.put("season",          basis.path("season").asText(""));
+                        evalCtx.put("plantingDate",    basis.path("date").asText(""));
+                        evalCtx.put("validShortlist",  basis.path("shortlist").toString());
+                        evalCtx.put("anchorCrop",      basis.path("anchorCrop").asText(""));
+                        // Pass live weather into eval context so judge checks temp vs crop
+                        if (!basis.path("tempMaxC").isMissingNode())
+                            evalCtx.put("tempMaxC", basis.path("tempMaxC").asDouble());
+                        if (!basis.path("tempMinC").isMissingNode())
+                            evalCtx.put("tempMinC", basis.path("tempMinC").asDouble());
+                        if (!basis.path("humidity").isMissingNode())
+                            evalCtx.put("humidity", basis.path("humidity").asDouble());
+                        if (!basis.path("rain7dMm").isMissingNode())
+                            evalCtx.put("rain7dMm", basis.path("rain7dMm").asDouble());
+                    }
+                    // Include market asOfDate (= harvest date) so judge can verify timing
+                    if (ctx != null && ctx.get("market") instanceof Map<?,?> mkt) {
+                        Object asOfDate = mkt.get("asOfDate");
+                        Object harvestFlag = mkt.get("harvestPriceForecast");
+                        evalCtx.put("marketAsOfDate", asOfDate != null ? String.valueOf(asOfDate) : "");
+                        evalCtx.put("harvestPriceForecast", harvestFlag != null ? String.valueOf(harvestFlag) : "false");
+                    }
+                }
+            }
+        } catch (Exception ignored) { /* best-effort context enrichment */ }
 
         // Add the judge prompt as input message for Arize trace visibility
         Span current = io.opentelemetry.api.trace.Span.current();
