@@ -209,6 +209,7 @@ export default function AgentPanel({
             <AgentTrace running={busy} finished={!!rec} errored={!!error} />
             {farm && <FarmMap lat={farm.latitude} lon={farm.longitude} />}
           </div>
+          <div className="lg:col-span-3">
             {rec ? (
               <ResultCard
                 view={view}
