@@ -555,172 +555,171 @@ function ResultCard({
   return (
     <div className="space-y-4">
 
-      {/* ── Status bar ── */}
-      <div className="card px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
-        <div className="flex items-center gap-2 flex-wrap">
-          {isOffline ? (
-            <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-amber-300 uppercase tracking-wider">
-              <span className="h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse" />
-              Offline fallback
-            </span>
-          ) : (
-            <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-emerald-300 uppercase tracking-wider">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-              Live · Gemini 3
-            </span>
-          )}
-          {noStructured && (
-            <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-300/80 uppercase tracking-wider">
-              <span className="h-1.5 w-1.5 rounded-full bg-amber-300 animate-pulse" />
-              Unstructured response
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-3 text-[11px] text-slate-500 font-mono">
-          {latencyMs && <span>{latencyMs}ms</span>}
-          <span>{view._modelServed ?? "gemini-3.1-pro-preview"}</span>
-        </div>
-      </div>
+      {/* ═══════════════════════════════════════════════════════════════
+           HERO — Recommended Crop (status + crop + basis + shortlist)
+           ═══════════════════════════════════════════════════════════ */}
+      <div className="rounded-2xl border border-emerald-400/20 bg-gradient-to-br from-[#0d2318] via-[#0a1e14] to-[#0f1a2e] overflow-hidden">
 
-      {/* ── Offline billing notice ── */}
-      {isOffline && view._reason?.includes("quota") && (
-        <div className="rounded-xl border border-amber-400/30 bg-amber-400/[0.05] px-4 py-3 text-sm text-amber-200 leading-relaxed">
-          <div className="font-semibold text-amber-300 mb-1">⚠ Gemini 3 quota reached — billing fix needed</div>
-          <p className="text-[12px]">
-            Visit{" "}
-            <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer" className="underline text-amber-100">
-              aistudio.google.com/apikey
-            </a>
-            {" "}→ Set up billing → link GCP billing account. No code changes needed.
-          </p>
-          <button onClick={() => onAsk({ forceLive: true })} disabled={busy}
-            className="mt-2 text-[11px] px-3 py-1 rounded border border-amber-300/40 text-amber-200 hover:bg-amber-300/10 disabled:opacity-50">
-            ⟳ Retry live
-          </button>
-        </div>
-      )}
-
-      {/* ── Hero: recommended crop ── */}
-      {view.crop && (
-        <div className="card px-5 py-4">
-          <div className="flex items-center justify-between gap-4 flex-wrap">
-            <div>
-              <div className="text-[10px] uppercase tracking-[0.18em] text-emerald-300/70 font-semibold mb-1">
-                Recommended Crop
-              </div>
-              <div className="text-3xl font-bold text-white capitalize tracking-tight">
-                🌱 {view.crop}
-              </div>
-              {view._basis?.season && (
-                <div className="mt-1.5 flex items-center gap-2 flex-wrap">
-                  <span className="text-[11px] px-2 py-0.5 rounded-full border border-emerald-400/30 bg-emerald-400/10 text-emerald-300 font-medium">
-                    {view._basis.season} season
-                  </span>
-                  {view._basis.soil && (
-                    <span className="text-[11px] px-2 py-0.5 rounded-full border border-slate-400/20 bg-white/[0.04] text-slate-300">
-                      {view._basis.soil} soil
-                    </span>
-                  )}
-                  {view._basis.rain7dMm != null && (
-                    <span className="text-[11px] px-2 py-0.5 rounded-full border border-blue-400/20 bg-blue-400/[0.05] text-blue-300">
-                      🌧 {Math.round(view._basis.rain7dMm)}mm rain (7d)
-                    </span>
-                  )}
-                </div>
-              )}
-            </div>
-            <ConfidenceRing value={conf} />
+        {/* Status strip */}
+        <div className="flex items-center justify-between px-5 pt-4 pb-0 gap-2 flex-wrap">
+          <div className="flex items-center gap-2">
+            {isOffline ? (
+              <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-amber-300 uppercase tracking-widest">
+                <span className="h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse" />Offline fallback
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-emerald-400 uppercase tracking-widest">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />Live · Gemini 3
+              </span>
+            )}
+            {noStructured && (
+              <span className="text-[10px] font-semibold text-amber-300/70 uppercase tracking-widest">· Unstructured</span>
+            )}
           </div>
+          <div className="flex items-center gap-3 text-[10px] text-slate-500 font-mono">
+            {latencyMs && <span>{(latencyMs / 1000).toFixed(1)}s</span>}
+            <span className="text-slate-600">{view._modelServed ?? "gemini-3.1-pro-preview"}</span>
+          </div>
+        </div>
 
-          {/* Shortlist pills */}
-          {Array.isArray(view._basis?.shortlist) && view._basis!.shortlist.length > 0 && (
-            <div className="mt-3 pt-3 border-t border-white/5">
-              <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-2">Other suitable crops for this location</div>
-              <div className="flex flex-wrap gap-1.5">
-                {view._basis!.shortlist.map((c, i) => {
-                  const picked = view.crop && c.toLowerCase() === view.crop.toLowerCase();
-                  return (
-                    <button key={i} type="button" disabled={busy || !!picked}
-                      onClick={() => onAsk({ cropOverride: c })}
-                      title={picked ? "Currently recommended" : `Re-plan with ${c}`}
-                      className={"px-3 py-1 rounded-full text-xs border transition " + (
-                        picked
-                          ? "border-emerald-400/60 bg-emerald-400/15 text-emerald-200 font-semibold cursor-default"
-                          : "border-white/10 bg-white/[0.04] text-slate-300 hover:border-emerald-400/40 hover:text-emerald-200 disabled:opacity-40"
-                      )}>
-                      {c}{picked ? " ✓" : ""}
-                    </button>
-                  );
-                })}
-                {view.crop && (
-                  <button type="button" disabled={busy}
-                    onClick={() => { onSetCrop(""); onAsk({ forceLive: true }); }}
-                    className="px-3 py-1 rounded-full text-xs border border-slate-400/20 bg-white/[0.03] text-slate-400 hover:text-slate-200 hover:border-slate-400/40 disabled:opacity-40">
-                    🔁 Re-plan
-                  </button>
+        {/* Offline billing notice */}
+        {isOffline && view._reason?.includes("quota") && (
+          <div className="mx-5 mt-3 rounded-xl border border-amber-400/30 bg-amber-400/[0.06] px-4 py-3 text-sm text-amber-200">
+            <div className="font-semibold text-amber-300 mb-1">⚠ Gemini 3 quota reached</div>
+            <p className="text-[12px] leading-relaxed">
+              Visit <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer" className="underline text-amber-100">aistudio.google.com/apikey</a> → Set up billing. No code changes needed.
+            </p>
+            <button onClick={() => onAsk({ forceLive: true })} disabled={busy}
+              className="mt-2 text-[11px] px-3 py-1 rounded border border-amber-300/40 text-amber-200 hover:bg-amber-300/10 disabled:opacity-50">
+              ⟳ Retry live
+            </button>
+          </div>
+        )}
+
+        {/* Crop name + confidence ring */}
+        <div className="flex items-center justify-between gap-4 px-5 pt-5 pb-4">
+          <div className="min-w-0">
+            <div className="text-[10px] uppercase tracking-[0.2em] text-emerald-400/60 font-semibold mb-2">
+              Recommended Crop
+            </div>
+            <div className="text-4xl sm:text-5xl font-black text-white capitalize tracking-tight leading-none flex items-center gap-3">
+              <span className="text-3xl">🌱</span> {view.crop ?? "Analysing…"}
+            </div>
+            {view._basis?.season && (
+              <div className="mt-3 flex items-center gap-2 flex-wrap">
+                <span className="text-[11px] px-2.5 py-0.5 rounded-full border border-emerald-400/35 bg-emerald-400/10 text-emerald-300 font-medium">
+                  {view._basis.season} season
+                </span>
+                {view._basis.soil && (
+                  <span className="text-[11px] px-2.5 py-0.5 rounded-full border border-slate-400/20 bg-white/[0.05] text-slate-300">
+                    {view._basis.soil} soil
+                  </span>
+                )}
+                {view._basis.rain7dMm != null && (
+                  <span className="text-[11px] px-2.5 py-0.5 rounded-full border border-blue-400/25 bg-blue-400/[0.07] text-blue-300">
+                    🌧 {Math.round(view._basis.rain7dMm)}mm rain (7d)
+                  </span>
                 )}
               </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ── Summary advice ── */}
-      {view.advice && !view.advice.trimStart().startsWith("{") && (
-        <div className="card px-5 py-4">
-          <div className="flex items-center gap-2 mb-3">
-            <span className="text-base">💡</span>
-            <h4 className="font-semibold text-slate-100">Why this plan works for your farm</h4>
+            )}
           </div>
-          <p className="text-sm text-slate-200 leading-relaxed">{view.advice}</p>
+          <div className="shrink-0">
+            <ConfidenceRing value={conf} />
+          </div>
+        </div>
+
+        {/* Shortlist pills */}
+        {Array.isArray(view._basis?.shortlist) && view._basis!.shortlist.length > 0 && (
+          <div className="px-5 pb-5 border-t border-white/[0.06] pt-3">
+            <div className="text-[10px] text-slate-500 uppercase tracking-widest mb-2">Also suitable for this location</div>
+            <div className="flex flex-wrap gap-2">
+              {view._basis!.shortlist.map((c, i) => {
+                const picked = view.crop && c.toLowerCase() === view.crop.toLowerCase();
+                return (
+                  <button key={i} type="button" disabled={busy || !!picked}
+                    onClick={() => onAsk({ cropOverride: c })}
+                    title={picked ? "Currently recommended" : `Re-plan with ${c}`}
+                    className={"px-3 py-1 rounded-full text-[12px] border transition-all " + (
+                      picked
+                        ? "border-emerald-400/60 bg-emerald-400/20 text-emerald-200 font-semibold cursor-default"
+                        : "border-white/10 bg-white/[0.03] text-slate-300 hover:border-emerald-400/40 hover:bg-emerald-400/10 hover:text-emerald-200 disabled:opacity-40"
+                    )}>
+                    {c}{picked ? " ✓" : ""}
+                  </button>
+                );
+              })}
+              {view.crop && (
+                <button type="button" disabled={busy}
+                  onClick={() => { onSetCrop(""); onAsk({ forceLive: true }); }}
+                  className="px-3 py-1 rounded-full text-[12px] border border-slate-400/20 bg-white/[0.03] text-slate-400 hover:text-slate-200 hover:border-slate-400/40 disabled:opacity-40 flex items-center gap-1">
+                  🔁 Re-plan
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ═════════════════════════════════════════════════
+           ADVICE — Why this plan works
+           ═════════════════════════════════════════════ */}
+      {view.advice && !view.advice.trimStart().startsWith("{") && (
+        <div className="rounded-2xl border border-white/[0.07] bg-white/[0.025] px-6 py-5">
+          <div className="flex items-center gap-2.5 mb-3">
+            <span className="text-xl">💡</span>
+            <h4 className="font-semibold text-slate-100 text-[15px]">Why this plan works for your farm</h4>
+          </div>
+          <p className="text-[13.5px] text-slate-300 leading-7">{view.advice}</p>
         </div>
       )}
 
-      {/* ── Impact numbers ── */}
+      {/* ═════════════════════════════════════════════════
+           PROJECTED IMPACT
+           ═════════════════════════════════════════════ */}
       {view.impact && (
-        <div className="card px-5 py-4">
-          <div className="flex items-center gap-2 mb-3">
-            <span className="text-base">📊</span>
-            <h4 className="font-semibold text-slate-100">Projected impact</h4>
+        <div className="rounded-2xl border border-white/[0.07] bg-white/[0.025] px-6 py-5">
+          <div className="flex items-center gap-2.5 mb-4">
+            <span className="text-xl">📊</span>
+            <h4 className="font-semibold text-slate-100 text-[15px]">Projected impact</h4>
           </div>
           <ImpactDashboard impact={view.impact} />
         </div>
       )}
 
-      {/* ── Task timeline ── */}
+      {/* ═════════════════════════════════════════════════
+           TASK TIMELINE
+           ═════════════════════════════════════════════ */}
       {Array.isArray(view.tasks) && view.tasks.length > 0 && (
-        <div className="card px-5 py-4">
-          <div className="flex items-center gap-2 mb-4">
-            <span className="text-base">📋</span>
-            <h4 className="font-semibold text-slate-100">Your action plan</h4>
-            <span className="ml-auto text-[11px] text-slate-500">{view.tasks.length} steps</span>
+        <div className="rounded-2xl border border-white/[0.07] bg-white/[0.025] px-6 py-5">
+          <div className="flex items-center gap-2.5 mb-5">
+            <span className="text-xl">📋</span>
+            <h4 className="font-semibold text-slate-100 text-[15px]">Your action plan</h4>
+            <span className="ml-auto text-[11px] text-slate-500 bg-white/[0.04] border border-white/10 px-2 py-0.5 rounded-full">
+              {view.tasks.length} steps
+            </span>
           </div>
-          <div className="space-y-3">
+          <div className="space-y-1">
             {view.tasks.map((t, i) => {
               const action = typeof t === "string" ? t : t.action ?? "";
               const why    = typeof t === "string" ? "" : (t.why ?? "");
               const day    = typeof t === "string" ? null : (t.day ?? null);
               return (
-                <div key={i} className="flex gap-3">
-                  {/* Step number / day badge */}
+                <div key={i} className="flex gap-4">
                   <div className="shrink-0 flex flex-col items-center">
-                    <div className="h-7 w-7 rounded-full bg-emerald-400/15 border border-emerald-400/30 flex items-center justify-center text-xs font-bold text-emerald-300">
+                    <div className="h-8 w-8 rounded-full bg-emerald-400/15 border border-emerald-400/30 flex items-center justify-center text-[11px] font-bold text-emerald-300 mt-1">
                       {day ?? (i + 1)}
                     </div>
                     {i < view.tasks!.length - 1 && (
-                      <div className="w-px flex-1 bg-emerald-400/10 mt-1 mb-0 min-h-[12px]" />
+                      <div className="w-px flex-1 bg-emerald-400/[0.12] mt-1 min-h-[16px]" />
                     )}
                   </div>
-                  {/* Content */}
-                  <div className="pb-3 flex-1 min-w-0">
+                  <div className="pb-4 flex-1 min-w-0">
                     {day != null && (
-                      <div className="text-[10px] text-emerald-300/70 font-semibold uppercase tracking-wider mb-0.5">
-                        Day {day}
-                      </div>
+                      <div className="text-[10px] text-emerald-400/60 font-semibold uppercase tracking-widest mb-0.5">Day {day}</div>
                     )}
-                    <div className="text-sm font-medium text-slate-100">{action}</div>
+                    <div className="text-[13.5px] font-medium text-slate-100 leading-snug">{action}</div>
                     {why && (
-                      <div className="mt-1 text-xs text-slate-400 leading-relaxed border-l-2 border-emerald-400/20 pl-2">
+                      <div className="mt-1.5 text-[12px] text-slate-400 leading-relaxed border-l-2 border-emerald-400/20 pl-3">
                         {why}
                       </div>
                     )}
@@ -732,34 +731,38 @@ function ResultCard({
         </div>
       )}
 
-      {/* ── Risks ── */}
+      {/* ═════════════════════════════════════════════════
+           RISKS
+           ═════════════════════════════════════════════ */}
       {Array.isArray(view.risks) && view.risks.length > 0 && (
-        <div className="card px-5 py-4">
-          <div className="flex items-center gap-2 mb-3">
-            <span className="text-base">⚠️</span>
-            <h4 className="font-semibold text-slate-100">Risks to watch</h4>
+        <div className="rounded-2xl border border-amber-400/15 bg-amber-400/[0.03] px-6 py-5">
+          <div className="flex items-center gap-2.5 mb-4">
+            <span className="text-xl">⚠️</span>
+            <h4 className="font-semibold text-slate-100 text-[15px]">Risks to watch</h4>
           </div>
-          <div className="space-y-2">
+          <div className="grid sm:grid-cols-2 gap-2.5">
             {view.risks.map((r, i) => (
-              <div key={i} className="flex gap-3 rounded-lg border border-amber-400/15 bg-amber-400/[0.04] px-3 py-2">
-                <span className="text-amber-400 text-sm shrink-0">⚡</span>
-                <p className="text-sm text-amber-100/90 leading-relaxed">{r}</p>
+              <div key={i} className="flex gap-3 rounded-xl border border-amber-400/12 bg-amber-400/[0.05] px-4 py-3">
+                <span className="text-amber-400 text-base shrink-0 mt-0.5">⚡</span>
+                <p className="text-[13px] text-amber-100/90 leading-relaxed">{r}</p>
               </div>
             ))}
           </div>
         </div>
       )}
 
-      {/* ── Location basis (collapsed details) ── */}
+      {/* ═════════════════════════════════════════════════
+           LOCATION BASIS (collapsible)
+           ═════════════════════════════════════════════ */}
       {view._basis && (
-        <details className="card p-0 overflow-hidden">
-          <summary className="px-4 py-3 cursor-pointer text-xs font-medium text-slate-400 hover:text-slate-200 select-none flex items-center gap-2">
+        <details className="rounded-2xl border border-white/[0.07] bg-white/[0.02] overflow-hidden">
+          <summary className="px-5 py-3.5 cursor-pointer text-[12px] font-medium text-slate-400 hover:text-slate-200 select-none flex items-center gap-2">
             <span>🗺️</span>
             <span>Why this crop was chosen · location &amp; field data</span>
             <span className="ml-auto text-[10px] text-slate-600">expand</span>
           </summary>
-          <div className="border-t border-white/5 px-4 py-3">
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+          <div className="border-t border-white/5 px-5 py-4">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
               <BasisCell k="Season"      v={view._basis.season ?? "—"} />
               <BasisCell k="Soil"        v={`${view._basis.soil ?? "?"}${view._basis.soilSource === "farm-record" ? " (farm)" : " (geo)"}`} />
               <BasisCell k="Coordinates" v={view._basis.latitude != null ? `${view._basis.latitude.toFixed(3)}, ${view._basis.longitude?.toFixed(3)}` : "—"} />
@@ -769,7 +772,9 @@ function ResultCard({
         </details>
       )}
 
-      {/* ── Arize observability panel ── */}
+      {/* ═════════════════════════════════════════════════
+           ARIZE OBSERVABILITY
+           ═════════════════════════════════════════════ */}
       <ArizePanel
         arize={view.arize}
         traceId={rec.traceId}
@@ -781,9 +786,9 @@ function ResultCard({
       />
 
       {/* ── Footer ── */}
-      <div className="flex items-center justify-between text-[11px] text-slate-600 px-1">
-        <span>rec <code className="text-slate-500">{rec.id.slice(0, 10)}…</code></span>
-        {rec.traceId && <span>trace <code className="text-slate-500">{rec.traceId.slice(0, 16)}…</code></span>}
+      <div className="flex items-center justify-between text-[10px] text-slate-700 px-1">
+        <span>rec <code className="text-slate-600">{rec.id.slice(0, 10)}…</code></span>
+        {rec.traceId && <span>trace <code className="text-slate-600">{rec.traceId.slice(0, 16)}…</code></span>}
       </div>
     </div>
   );
