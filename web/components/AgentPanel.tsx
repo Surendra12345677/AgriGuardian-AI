@@ -288,157 +288,62 @@ function ConfidenceRing({ value }: { value: number }) {
   );
 }
 
-// ─── Arize observability panel ────────────────────────────────────────────────
-function ArizePanel({ arize, traceId, modelServed, evalScore, evalDetails, evalJudge }: {
+// ─── Compact Arize trace badge (replaces the old full ArizePanel) ─────────────
+function ArizeBadge({ arize, traceId, evalScore }: {
   arize?: Parsed["arize"];
   traceId?: string;
-  modelServed?: string;
   evalScore?: number;
-  evalDetails?: Parsed["evalDetails"];
-  evalJudge?: string;
 }) {
-  if (!arize && !traceId) return null;
+  const [copied, setCopied] = useState(false);
   const tid = arize?.traceId || traceId || "";
-  // Arize space / project come from NEXT_PUBLIC_ env vars so no value is
-  // hardcoded in source.  They default to the hackathon project settings.
-  const arizeSpaceId   = process.env.NEXT_PUBLIC_ARIZE_SPACE_ID    ?? "";
-  const arizeProject   = process.env.NEXT_PUBLIC_ARIZE_PROJECT_NAME ?? "agriguardian-ai";
-  const arizeOrgBase   = arizeSpaceId
-    ? `https://app.arize.com/organizations/${arizeSpaceId}`
-    : "https://app.arize.com";
-  const arizeUrl = `${arizeOrgBase}/projects/${arizeProject}/traces`;
-
   const spanCount = arize?.spansExported ?? 9;
 
-  const FLOW = [
-    { icon: "🤖", label: "Agent steps",  desc: `${spanCount} OTel spans` },
-    { icon: "📡", label: "OTLP export",  desc: "OpenTelemetry → Arize" },
-    { icon: "🔭", label: "Arize AX",     desc: "Trace + eval storage" },
-    { icon: "⚖️", label: "LLM judge",   desc: "4-dim score + replay" },
-  ];
+  function copyTrace() {
+    if (!tid) return;
+    navigator.clipboard.writeText(tid).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
+
+  if (!tid && !arize) return null;
 
   return (
-    <div className="mt-5">
-      <div className="label mb-2 flex items-center gap-2 flex-wrap">
-        <span className="text-[12px]">Arize AX · Observability &amp; Evaluation</span>
-        <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-400/15 text-emerald-300 font-semibold uppercase tracking-wider animate-pulse">live</span>
-        <span className="text-[10px] px-1.5 py-0.5 rounded bg-violet-400/15 text-violet-300 font-semibold uppercase tracking-wider">MCP</span>
-        <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-400/15 text-blue-300 font-semibold uppercase tracking-wider">OTLP</span>
-        <a href={arizeUrl} target="_blank" rel="noreferrer"
-           className="ml-auto text-[11px] px-2.5 py-1 rounded-lg border border-violet-400/40 text-violet-200 hover:bg-violet-400/10 flex items-center gap-1">
-          View traces in Arize →
-        </a>
+    <div className="rounded-xl border border-violet-400/10 bg-violet-400/[0.03] px-4 py-3">
+      <div className="flex items-center gap-2 flex-wrap">
+        {/* Live badge */}
+        <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-300 uppercase tracking-wider">
+          <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+          Arize AX · Live
+        </span>
+        <span className="text-[10px] text-slate-500">{spanCount} OTel spans exported</span>
+        {evalScore != null && (
+          <span className={`ml-auto text-[11px] font-bold ${evalScore >= 0.75 ? "text-emerald-300" : evalScore >= 0.6 ? "text-cyan-300" : "text-amber-300"}`}>
+            {evalScore >= 0.75 ? "✓ AI judge: pass" : "⚠ AI judge: review"} · {evalScore.toFixed(2)}
+          </span>
+        )}
       </div>
-
-      {/* Visual flow */}
-      <div className="flex items-center gap-1 mb-3 overflow-x-auto pb-1">
-        {FLOW.map((f, i) => (
-          <div key={i} className="flex items-center gap-1 flex-shrink-0">
-            <div className="rounded-lg border border-white/10 bg-white/[0.03] px-2.5 py-1.5 text-center min-w-[80px]">
-              <div className="text-base">{f.icon}</div>
-              <div className="text-[11px] text-slate-200 font-medium leading-tight">{f.label}</div>
-              <div className="text-[10px] text-slate-500 leading-tight">{f.desc}</div>
-            </div>
-            {i < FLOW.length - 1 && <span className="text-slate-600 text-xs flex-shrink-0">→</span>}
-          </div>
-        ))}
-      </div>
-
-      {/* Inline eval scorecard — shows when LLM judge has scored this result */}
-      {evalDetails && (
-        <div className="mb-3 rounded-lg border border-violet-400/20 bg-violet-400/[0.04] p-3">
-          <div className="flex items-center gap-2 mb-2">
-            <span className="text-[11px] font-semibold text-violet-300">LLM-as-Judge eval</span>
-            {evalJudge && <span className="text-[10px] px-1.5 py-0.5 rounded bg-violet-400/20 text-violet-200">{evalJudge}</span>}
-            {evalScore != null && (
-              <span className={`ml-auto text-[11px] font-bold ${evalScore >= 0.75 ? "text-emerald-300" : evalScore >= 0.6 ? "text-cyan-300" : "text-amber-300"}`}>
-                {evalScore >= 0.75 ? "✓ pass" : "⚠ needs review"} · {evalScore.toFixed(3)}
-              </span>
-            )}
-          </div>
-          <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
-            {([
-              ["relevance",           "Relevance"],
-              ["groundedness",        "Groundedness"],
-              ["agronomicCorrectness","Agronomic"],
-              ["hallucinationRisk",   "Hallucination Risk"],
-            ] as [keyof NonNullable<Parsed["evalDetails"]>, string][]).map(([k, label]) => {
-              const v = evalDetails[k];
-              if (v == null) return null;
-              const pct = Math.round(v * 100);
-              const c = v >= 0.8 ? "bg-emerald-400" : v >= 0.6 ? "bg-cyan-400" : "bg-amber-400";
-              return (
-                <div key={k}>
-                  <div className="flex justify-between text-[10px] mb-0.5">
-                    <span className="text-slate-400">{label}</span>
-                    <span className={v >= 0.8 ? "text-emerald-300" : v >= 0.6 ? "text-cyan-300" : "text-amber-300"}>{v.toFixed(2)}</span>
-                  </div>
-                  <div className="h-1 w-full rounded-full bg-white/[0.05] overflow-hidden">
-                    <div className={`h-full rounded-full ${c}`} style={{ width: `${pct}%` }} />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+      {tid && (
+        <div className="mt-2 flex items-center gap-2">
+          <span className="text-[10px] text-slate-500 shrink-0">Trace ID</span>
+          <code className="flex-1 text-[10px] text-slate-400 font-mono truncate">{tid}</code>
+          <button
+            type="button"
+            onClick={copyTrace}
+            className="shrink-0 text-[10px] px-2 py-0.5 rounded border border-violet-400/20 text-violet-300 hover:bg-violet-400/10 transition"
+          >
+            {copied ? "✓ Copied" : "Copy"}
+          </button>
         </div>
       )}
-
-      <div className="rounded-xl border border-emerald-400/25 bg-gradient-to-br from-emerald-400/[0.06] to-violet-400/[0.04] p-4 space-y-3 text-[13px]">
-        {/* What is Arize — one sentence */}
-        <p className="text-[12px] text-slate-300 leading-relaxed border-b border-white/5 pb-3">
-          <span className="font-semibold text-emerald-300">What Arize does:</span>{" "}
-          Every step this agent runs — from fetching weather to Gemini reasoning — emits an{" "}
-          <span className="text-blue-300 font-medium">OpenTelemetry span</span> that is shipped in real
-          time to Arize AX. Judges can open Arize, see the full trace, run automated evals, and replay
-          any failed plan as a regression test — all without touching code.
-        </p>
-
-        <div className="grid sm:grid-cols-2 gap-x-6 gap-y-2">
-          <ArizeRow label="MCP operation"   value={arize?.operation  || "search_traces"}      color="text-emerald-200" />
-          <ArizeRow label="Exporter"        value={arize?.exporter   || "OTLP → Arize AX"}    color="text-slate-100"  />
-          <ArizeRow label="Spans exported"  value={String(spanCount)}                           color="text-slate-100"  />
-          <ArizeRow label="Reasoning model" value={modelServed        || "gemini-3.1-pro-preview"} color="text-violet-200" />
-          {tid && (
-            <div className="sm:col-span-2 flex justify-between gap-2">
-              <span className="text-slate-400">Trace ID</span>
-              <a href={`${arizeUrl}?traceId=${tid}`} target="_blank" rel="noreferrer"
-                 className="font-mono text-[11px] text-violet-300 hover:text-violet-100 underline truncate max-w-[60%]"
-                 title="Open this trace in Arize AX">
-                {tid.slice(0, 32)}… ↗
-              </a>
-            </div>
-          )}
-        </div>
-
-        {arize?.note && (
-          <p className="pt-2 mt-1 border-t border-emerald-400/15 text-slate-300 leading-relaxed text-[12px]">
-            {arize.note}
-          </p>
-        )}
-
-        {/* What judges can do */}
-        <div className="rounded-lg border border-violet-400/15 bg-violet-400/[0.04] px-3 py-2 text-[11px] text-slate-300 space-y-1">
-          <div className="font-semibold text-violet-300 mb-1">What judges can do in Arize AX:</div>
-          <div className="grid sm:grid-cols-2 gap-x-4 gap-y-0.5">
-            {[
-              ["🔍 Trace replay",    "See every tool call, its input/output & latency"],
-              ["⚖️ LLM evals",      "Auto-score on hallucination, relevance, groundedness"],
-              ["🔁 Regression test", "Replay any failed trace to catch regressions"],
-              ["📊 Score trends",    "Live aggregate from every run — visible on dashboard"],
-            ].map(([k, v], i) => (
-              <div key={i} className="flex gap-1.5">
-                <span className="flex-shrink-0">{k}</span>
-                <span className="text-slate-500">— {v}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
+      <p className="mt-2 text-[10px] text-slate-500 leading-relaxed">
+        Every agent step streams to Arize AX via OTLP — full span tree, LLM-as-judge scores, and regression replay available in the Arize dashboard.
+      </p>
     </div>
   );
 }
 
-function ArizeRow({ label, value, color }: { label: string; value: string; color: string }) {
+function _unused_ArizeRow({ label, value, color }: { label: string; value: string; color: string }) {
   return (
     <div className="flex justify-between gap-2">
       <span className="text-slate-400">{label}</span>
@@ -679,11 +584,12 @@ function ResultCard({
         </details>
       )}
 
-      {/* ── Arize panel ── */}
-      <ArizePanel arize={view.arize} traceId={rec.traceId} modelServed={view._modelServed}
+      {/* ── Arize trace badge ── */}
+      <ArizeBadge
+        arize={view.arize}
+        traceId={rec.traceId}
         evalScore={view.evalScore ?? rec.evalScore ?? undefined}
-        evalDetails={view.evalDetails ?? rec.evalDetails ?? undefined}
-        evalJudge={view.evalJudge ?? rec.evalJudge ?? undefined} />
+      />
 
       {/* ── Footer ── */}
       <div className="flex items-center justify-between text-[11px] text-slate-600 px-1">

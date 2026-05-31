@@ -11,9 +11,9 @@ import { api, type EvalDistribution, type EvalTrend, type EvalTrendPoint } from 
 
 const ARIZE_SPACE_ID    = process.env.NEXT_PUBLIC_ARIZE_SPACE_ID    ?? "";
 const ARIZE_PROJECT     = process.env.NEXT_PUBLIC_ARIZE_PROJECT_NAME ?? "agriguardian-ai";
-const ARIZE_TRACES_URL  = ARIZE_SPACE_ID
-  ? `https://app.arize.com/organizations/${ARIZE_SPACE_ID}/projects/${ARIZE_PROJECT}/traces`
-  : "https://app.arize.com";
+// Use the Arize home URL — deep-links require the user to already be on the right page.
+// Judges log in at app.arize.com and then navigate to the agriguardian-ai project.
+const ARIZE_HOME_URL    = "https://app.arize.com";
 
 export function EvalQualityCard({ refreshMs = 6000 }: { refreshMs?: number }) {
   const [dist, setDist] = useState<EvalDistribution | null>(null);
@@ -152,7 +152,7 @@ export function EvalQualityCard({ refreshMs = 6000 }: { refreshMs?: number }) {
       {/* Open in Arize — prominent CTA for judges */}
       <div className="space-y-2">
         <a
-          href={ARIZE_TRACES_URL}
+          href={ARIZE_HOME_URL}
           target="_blank"
           rel="noreferrer"
           className="flex items-center justify-center gap-2 w-full rounded-xl
@@ -165,33 +165,19 @@ export function EvalQualityCard({ refreshMs = 6000 }: { refreshMs?: number }) {
             <polyline points="15 3 21 3 21 9" />
             <line x1="10" y1="14" x2="21" y2="3" />
           </svg>
-          Open traces in Arize AX →
+          Open Arize AX Dashboard →
         </a>
 
         {/* Login notice + project details for judges */}
         <div className="rounded-lg border border-violet-400/10 bg-violet-400/[0.03] px-3 py-2 space-y-1.5">
-          <div className="flex items-center gap-1.5 text-[11px] text-slate-300">
-            <span className="text-violet-300">🔐</span>
+          <div className="flex items-start gap-1.5 text-[11px] text-slate-300">
+            <span className="text-violet-300 mt-0.5 shrink-0">🔐</span>
             <span>
-              <span className="font-semibold text-violet-200">Arize login required</span>
-              {" "}— use your Arize account. Judges from Arize have automatic access.
+              <span className="font-semibold text-violet-200">Login required</span>
+              {" "}— sign in at app.arize.com, then open project{" "}
+              <code className="text-emerald-300 text-[10px]">{ARIZE_PROJECT}</code>.
+              Arize judges have direct access.
             </span>
-          </div>
-          <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[10px] font-mono">
-            <div>
-              <span className="text-slate-500">project</span>
-              <span className="ml-1.5 text-emerald-300">{ARIZE_PROJECT}</span>
-            </div>
-            {ARIZE_SPACE_ID && (
-              <div>
-                <span className="text-slate-500">space</span>
-                <span className="ml-1.5 text-slate-300">{ARIZE_SPACE_ID.slice(0, 12)}…</span>
-              </div>
-            )}
-          </div>
-          <div className="text-[10px] text-slate-500 break-all">
-            <span className="text-slate-600">url: </span>
-            <span className="text-slate-400">{ARIZE_TRACES_URL}</span>
           </div>
         </div>
       </div>
