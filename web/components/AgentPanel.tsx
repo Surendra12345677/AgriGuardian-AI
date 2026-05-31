@@ -118,20 +118,28 @@ export default function AgentPanel({
   const parsed: Parsed = (() => {
     const raw = (rec?.reasoning ?? "").trim();
     if (!raw) return {};
-    // 1. Direct parse (ideal — responseMimeType:json gives clean output)
+    // 1. Direct parse
     try { return JSON.parse(raw); } catch {}
-    // 2. Strip markdown fences and retry (some models still wrap in ```json)
+    // 2. Strip markdown fences
     const noFence = raw
       .replace(/^```(?:json)?\s*/i, "")
       .replace(/\s*```\s*$/, "")
       .trim();
     try { return JSON.parse(noFence); } catch {}
-    // 3. Extract first {...} block (handles leading/trailing garbage)
+    // 3. Extract first {...} block
     const m = noFence.match(/\{[\s\S]*\}/);
     if (m) { try { return JSON.parse(m[0]); } catch {} }
-    // 4. Last resort — show whatever text is there as advice
+    // 4. Last resort — show text as advice
     return { advice: raw };
   })();
+
+  // 5. If advice itself looks like a JSON blob (double-encoded), try to re-parse it
+  if (parsed.advice && typeof parsed.advice === "string" && parsed.advice.trimStart().startsWith("{")) {
+    try {
+      const inner = JSON.parse(parsed.advice) as Parsed;
+      if (inner.crop || inner.tasks || inner.impact) Object.assign(parsed, inner);
+    } catch {}
+  }
   const usedFallback = !!rec
     && !parsed.advice && !parsed.crop && !(parsed.tasks?.length) && !parsed.impact;
   const view: Parsed = parsed;
@@ -201,216 +209,23 @@ export default function AgentPanel({
             <AgentTrace running={busy} finished={!!rec} errored={!!error} />
             {farm && <FarmMap lat={farm.latitude} lon={farm.longitude} />}
           </div>
-          <div className="card p-5 lg:col-span-3">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <h3 className="font-semibold text-slate-100">Result</h3>
-                {view.crop && (
-                  <div className="text-xs text-emerald-300 font-semibold uppercase tracking-wider mt-0.5">
-                    Recommended crop · {view.crop}
-                  </div>
-                )}
-                {rec && (
-                  view._source === "offline-fallback" ? (
-                    <div className="mt-1 space-y-1.5">
-                      <div className="inline-flex items-center gap-1.5 text-[10px]
-                                      uppercase tracking-wider text-amber-300/90 font-semibold">
-                        <span className="h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse" />
-                        Gemini 3 quota limit reached · billing fix needed
-                      </div>
-                      {/* Show billing fix banner when it's a quota issue */}
-                      {view._reason && view._reason.includes("quota") && (
-                        <div className="rounded-lg border border-amber-400/30 bg-amber-400/[0.06] px-3 py-2 text-[11px] text-amber-200 leading-relaxed">
-                          <span className="font-semibold text-amber-300">To restore live Gemini 3: </span>
-                          Go to{" "}
-                          <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer"
-                             className="underline text-amber-100 hover:text-white">
-                            aistudio.google.com/apikey
-                          </a>
-                          {" "}→ find your key → click <strong>Set up billing / Enable Pay-as-you-go</strong> → link your GCP billing account.
-                          No code changes needed — it works immediately.
-                        </div>
-                      )}
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => ask({ forceLive: true })}
-                          disabled={busy}
-                          className="text-[10px] px-2 py-0.5 rounded border border-amber-300/40 text-amber-200 hover:bg-amber-300/10 disabled:opacity-50"
-                          title={view._reason ? `Why offline: ${view._reason}` : "Retry with a fresh Gemini call"}
-                        >
-                          ⟳ Retry live
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="mt-1 inline-flex items-center gap-1 text-[10px]
-                                    uppercase tracking-wider text-emerald-300/90 font-semibold">
-                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-300" />
-                      Live · Gemini
-                    </div>
-                  )
-                )}
-                {noStructured && (
-                  <div className="mt-1 inline-flex items-center gap-1 text-[10px]
-                                  uppercase tracking-wider text-amber-300/90 font-semibold">
-                    <span className="h-1.5 w-1.5 rounded-full bg-amber-300 animate-pulse" />
-                    Model returned no structured plan — showing raw text below
-                  </div>
-                )}
-              </div>
-              <ConfidenceRing value={busy ? -1 : conf} />
-            </div>
             {rec ? (
-              <>
-                <div className="mt-3 grid grid-cols-3 gap-2 text-center">
-                  <Metric k="Latency" v={latencyMs ? `${latencyMs}ms` : "—"} />
-                  <Metric k="Model"   v={view._source === "offline-fallback" ? "offline" : (view._modelServed ?? "gemini-3.1-pro-preview")} />
-                  <Metric k="Spans"   v={view._source === "offline-fallback" ? "0" : "9"} />
-                </div>
-                {view.impact && <div className="mt-4"><ImpactDashboard impact={view.impact} /></div>}
-                {view._basis && (
-                  <div className="mt-4 rounded-lg border border-emerald-400/15 bg-emerald-400/[0.04] p-3">
-                    <div className="label mb-2 flex items-center gap-2">
-                      <span>Why this crop · location basis</span>
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-400/15 text-emerald-300 font-semibold uppercase tracking-wider">
-                        farm-aware
-                      </span>
-                    </div>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
-                      <BasisCell k="Season"      v={view._basis.season ?? "—"} />
-                      <BasisCell k="Soil"
-                                 v={`${view._basis.soil ?? "?"}${view._basis.soilSource === "farm-record" ? " (your farm)" : " (geo-derived)"}`} />
-                      <BasisCell k="Coordinates" v={
-                        view._basis.latitude != null && view._basis.longitude != null
-                          ? `${view._basis.latitude.toFixed(3)}, ${view._basis.longitude.toFixed(3)}`
-                          : "—"
-                      } />
-                      <BasisCell k="Rain (7d)"
-                                 v={view._basis.rain7dMm != null ? `${Math.round(view._basis.rain7dMm)} mm` : "—"} />
-                    </div>
-                    {view._basis.anchorCrop && (
-                      <div className="mt-2.5 text-[11px] text-slate-400">
-                        <span className="uppercase tracking-wider font-semibold text-emerald-300/80">Location anchor</span>
-                        {" "}— derived deterministically from this farm&apos;s lat/lon so two different
-                        addresses always produce different recommendations:
-                        {" "}<code className="text-emerald-200">{view._basis.anchorCrop}</code>
-                      </div>
-                    )}
-                    {Array.isArray(view._basis.shortlist) && view._basis.shortlist.length > 0 && (
-                      <div className="mt-2.5">
-                        <div className="text-[11px] uppercase tracking-wider text-slate-400 mb-1.5 font-semibold">
-                          Candidate shortlist for this location · click any to re-plan
-                        </div>
-                        <div className="flex flex-wrap gap-1.5">
-                          {view._basis.shortlist.map((c, i) => {
-                            const picked = view.crop && c.toLowerCase() === view.crop.toLowerCase();
-                            return (
-                              <button key={i}
-                                    type="button"
-                                    disabled={busy || !!picked}
-                                    onClick={() => ask({ cropOverride: c })}
-                                    title={picked ? "Currently recommended crop" : `Re-plan with ${c} as the preferred crop`}
-                                    className={
-                                      "px-3 py-1 rounded-full text-[12px] border transition " +
-                                      (picked
-                                        ? "border-emerald-400/60 bg-emerald-400/15 text-emerald-200 font-semibold cursor-default"
-                                        : "border-white/10 bg-white/[0.04] text-slate-200 hover:border-emerald-400/50 hover:bg-emerald-400/[0.08] hover:text-emerald-200 disabled:opacity-50 disabled:cursor-not-allowed")
-                                    }>
-                                {c}{picked ? " ✓" : ""}
-                              </button>
-                            );
-                          })}
-                        </div>
-                        {view.crop && (
-                          <div className="mt-3 flex items-center gap-2 flex-wrap">
-                            <span className="text-[11px] text-slate-400">Don&apos;t like {view.crop}?</span>
-                            <button
-                              type="button"
-                              disabled={busy}
-                              onClick={() => {
-                                // Pick the first shortlist crop that ISN'T the current pick.
-                                const alt = (view._basis?.shortlist ?? []).find(
-                                  c => c.toLowerCase() !== (view.crop ?? "").toLowerCase()
-                                );
-                                if (alt) ask({ cropOverride: alt });
-                              }}
-                              className="text-[12px] px-3 py-1.5 rounded-lg border border-amber-300/40 text-amber-200 hover:bg-amber-300/10 disabled:opacity-50">
-                              👎 Suggest a different crop
-                            </button>
-                            <button
-                              type="button"
-                              disabled={busy}
-                              onClick={() => { setCrop(""); ask({ forceLive: true }); }}
-                              className="text-[12px] px-3 py-1.5 rounded-lg border border-emerald-400/30 text-emerald-200 hover:bg-emerald-400/[0.06] disabled:opacity-50">
-                              🔁 Re-plan from scratch
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )}
-                {view.advice && (
-                  <div className="mt-4">
-                    <div className="label mb-1">Advice</div>
-                    <p className="text-sm text-slate-200 leading-relaxed whitespace-pre-line">
-                      {view.advice}
-                    </p>
-                  </div>
-                )}
-                {Array.isArray(view.tasks) && view.tasks.length > 0 && (
-                  <div className="mt-4">
-                    <div className="label mb-2">Action plan</div>
-                    <ol className="grid sm:grid-cols-2 gap-2">
-                      {view.tasks.map((t, i) => (
-                        <li key={i} className="rounded-lg border border-white/5 bg-white/[0.02] p-2.5">
-                          <div className="flex gap-2">
-                            <span className="grid place-items-center h-6 w-6 rounded-md
-                                             bg-emerald-400/15 text-emerald-300 text-xs font-bold">
-                              {i + 1}
-                            </span>
-                            <div className="text-sm text-slate-200">
-                              {typeof t === "string" ? t : (
-                                <>
-                                  <span className="font-medium">
-                                    {t.day ? `Day ${t.day}: ` : ""}{t.action}
-                                  </span>
-                                  {t.why && <span className="text-slate-400"> — {t.why}</span>}
-                                </>
-                              )}
-                            </div>
-                          </div>
-                        </li>
-                      ))}
-                    </ol>
-                  </div>
-                )}
-                {Array.isArray(view.risks) && view.risks.length > 0 && (
-                  <div className="mt-4">
-                    <div className="label mb-1.5">Top risks</div>
-                    <ul className="space-y-1">
-                      {view.risks.map((r, i) => (
-                        <li key={i} className="text-xs text-amber-200/90 flex gap-1.5">
-                          <span>⚠️</span><span>{r}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-                <ArizePanel arize={view.arize} traceId={rec.traceId} modelServed={view._modelServed}
-                  evalScore={view.evalScore ?? rec.evalScore ?? undefined}
-                  evalDetails={view.evalDetails ?? rec.evalDetails ?? undefined}
-                  evalJudge={view.evalJudge ?? rec.evalJudge ?? undefined} />
-                <div className="mt-4 pt-3 border-t border-white/5 flex items-center justify-between text-[11px] text-slate-500">
-                  <span>rec id <code className="text-slate-400">{rec.id.slice(0, 12)}…</code></span>
-                  {rec.traceId && <span>trace <code className="text-slate-400">{rec.traceId.slice(0, 16)}…</code></span>}
-                </div>
-              </>
+              <ResultCard
+                view={view}
+                rec={rec}
+                latencyMs={latencyMs}
+                conf={conf}
+                noStructured={noStructured}
+                busy={busy}
+                onAsk={ask}
+                onSetCrop={setCrop}
+              />
             ) : (
-              <div className="mt-3 space-y-2">
-                <Skeleton h="h-4 w-2/3" />
+              <div className="card p-5 space-y-3">
+                <Skeleton h="h-5 w-1/3" />
                 <Skeleton h="h-4 w-full" />
                 <Skeleton h="h-4 w-5/6" />
+                <Skeleton h="h-20 w-full" />
                 <Skeleton h="h-4 w-1/2" />
               </div>
             )}
@@ -630,3 +445,251 @@ function ArizeRow({ label, value, color }: { label: string; value: string; color
     </div>
   );
 }
+
+// ─── Beautiful result card ──────────────────────────────────────────────────
+function ResultCard({
+  view, rec, latencyMs, conf, noStructured, busy, onAsk, onSetCrop,
+}: {
+  view: Parsed;
+  rec: Recommendation;
+  latencyMs: number | null;
+  conf: number;
+  noStructured: boolean;
+  busy: boolean;
+  onAsk: (opts?: { forceLive?: boolean; cropOverride?: string }) => void;
+  onSetCrop: (c: string) => void;
+}) {
+  const isOffline = view._source === "offline-fallback";
+
+  return (
+    <div className="space-y-4">
+
+      {/* ── Status bar ── */}
+      <div className="card px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap">
+          {isOffline ? (
+            <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-amber-300 uppercase tracking-wider">
+              <span className="h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse" />
+              Offline fallback
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-emerald-300 uppercase tracking-wider">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+              Live · Gemini 3
+            </span>
+          )}
+          {noStructured && (
+            <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-300/80 uppercase tracking-wider">
+              <span className="h-1.5 w-1.5 rounded-full bg-amber-300 animate-pulse" />
+              Unstructured response
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-3 text-[11px] text-slate-500 font-mono">
+          {latencyMs && <span>{latencyMs}ms</span>}
+          <span>{view._modelServed ?? "gemini-3.1-pro-preview"}</span>
+        </div>
+      </div>
+
+      {/* ── Offline billing notice ── */}
+      {isOffline && view._reason?.includes("quota") && (
+        <div className="rounded-xl border border-amber-400/30 bg-amber-400/[0.05] px-4 py-3 text-sm text-amber-200 leading-relaxed">
+          <div className="font-semibold text-amber-300 mb-1">⚠ Gemini 3 quota reached — billing fix needed</div>
+          <p className="text-[12px]">
+            Visit{" "}
+            <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer" className="underline text-amber-100">
+              aistudio.google.com/apikey
+            </a>
+            {" "}→ Set up billing → link GCP billing account. No code changes needed.
+          </p>
+          <button onClick={() => onAsk({ forceLive: true })} disabled={busy}
+            className="mt-2 text-[11px] px-3 py-1 rounded border border-amber-300/40 text-amber-200 hover:bg-amber-300/10 disabled:opacity-50">
+            ⟳ Retry live
+          </button>
+        </div>
+      )}
+
+      {/* ── Hero: recommended crop ── */}
+      {view.crop && (
+        <div className="card px-5 py-4">
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            <div>
+              <div className="text-[10px] uppercase tracking-[0.18em] text-emerald-300/70 font-semibold mb-1">
+                Recommended Crop
+              </div>
+              <div className="text-3xl font-bold text-white capitalize tracking-tight">
+                🌱 {view.crop}
+              </div>
+              {view._basis?.season && (
+                <div className="mt-1.5 flex items-center gap-2 flex-wrap">
+                  <span className="text-[11px] px-2 py-0.5 rounded-full border border-emerald-400/30 bg-emerald-400/10 text-emerald-300 font-medium">
+                    {view._basis.season} season
+                  </span>
+                  {view._basis.soil && (
+                    <span className="text-[11px] px-2 py-0.5 rounded-full border border-slate-400/20 bg-white/[0.04] text-slate-300">
+                      {view._basis.soil} soil
+                    </span>
+                  )}
+                  {view._basis.rain7dMm != null && (
+                    <span className="text-[11px] px-2 py-0.5 rounded-full border border-blue-400/20 bg-blue-400/[0.05] text-blue-300">
+                      🌧 {Math.round(view._basis.rain7dMm)}mm rain (7d)
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+            <ConfidenceRing value={conf} />
+          </div>
+
+          {/* Shortlist pills */}
+          {Array.isArray(view._basis?.shortlist) && view._basis!.shortlist.length > 0 && (
+            <div className="mt-3 pt-3 border-t border-white/5">
+              <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-2">Other suitable crops for this location</div>
+              <div className="flex flex-wrap gap-1.5">
+                {view._basis!.shortlist.map((c, i) => {
+                  const picked = view.crop && c.toLowerCase() === view.crop.toLowerCase();
+                  return (
+                    <button key={i} type="button" disabled={busy || !!picked}
+                      onClick={() => onAsk({ cropOverride: c })}
+                      title={picked ? "Currently recommended" : `Re-plan with ${c}`}
+                      className={"px-3 py-1 rounded-full text-xs border transition " + (
+                        picked
+                          ? "border-emerald-400/60 bg-emerald-400/15 text-emerald-200 font-semibold cursor-default"
+                          : "border-white/10 bg-white/[0.04] text-slate-300 hover:border-emerald-400/40 hover:text-emerald-200 disabled:opacity-40"
+                      )}>
+                      {c}{picked ? " ✓" : ""}
+                    </button>
+                  );
+                })}
+                {view.crop && (
+                  <button type="button" disabled={busy}
+                    onClick={() => { onSetCrop(""); onAsk({ forceLive: true }); }}
+                    className="px-3 py-1 rounded-full text-xs border border-slate-400/20 bg-white/[0.03] text-slate-400 hover:text-slate-200 hover:border-slate-400/40 disabled:opacity-40">
+                    🔁 Re-plan
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Summary advice ── */}
+      {view.advice && !view.advice.trimStart().startsWith("{") && (
+        <div className="card px-5 py-4">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-base">💡</span>
+            <h4 className="font-semibold text-slate-100">Why this plan works for your farm</h4>
+          </div>
+          <p className="text-sm text-slate-200 leading-relaxed">{view.advice}</p>
+        </div>
+      )}
+
+      {/* ── Impact numbers ── */}
+      {view.impact && (
+        <div className="card px-5 py-4">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-base">📊</span>
+            <h4 className="font-semibold text-slate-100">Projected impact</h4>
+          </div>
+          <ImpactDashboard impact={view.impact} />
+        </div>
+      )}
+
+      {/* ── Task timeline ── */}
+      {Array.isArray(view.tasks) && view.tasks.length > 0 && (
+        <div className="card px-5 py-4">
+          <div className="flex items-center gap-2 mb-4">
+            <span className="text-base">📋</span>
+            <h4 className="font-semibold text-slate-100">Your action plan</h4>
+            <span className="ml-auto text-[11px] text-slate-500">{view.tasks.length} steps</span>
+          </div>
+          <div className="space-y-3">
+            {view.tasks.map((t, i) => {
+              const action = typeof t === "string" ? t : t.action ?? "";
+              const why    = typeof t === "string" ? "" : (t.why ?? "");
+              const day    = typeof t === "string" ? null : (t.day ?? null);
+              return (
+                <div key={i} className="flex gap-3">
+                  {/* Step number / day badge */}
+                  <div className="shrink-0 flex flex-col items-center">
+                    <div className="h-7 w-7 rounded-full bg-emerald-400/15 border border-emerald-400/30 flex items-center justify-center text-xs font-bold text-emerald-300">
+                      {day ?? (i + 1)}
+                    </div>
+                    {i < view.tasks!.length - 1 && (
+                      <div className="w-px flex-1 bg-emerald-400/10 mt-1 mb-0 min-h-[12px]" />
+                    )}
+                  </div>
+                  {/* Content */}
+                  <div className="pb-3 flex-1 min-w-0">
+                    {day != null && (
+                      <div className="text-[10px] text-emerald-300/70 font-semibold uppercase tracking-wider mb-0.5">
+                        Day {day}
+                      </div>
+                    )}
+                    <div className="text-sm font-medium text-slate-100">{action}</div>
+                    {why && (
+                      <div className="mt-1 text-xs text-slate-400 leading-relaxed border-l-2 border-emerald-400/20 pl-2">
+                        {why}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ── Risks ── */}
+      {Array.isArray(view.risks) && view.risks.length > 0 && (
+        <div className="card px-5 py-4">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-base">⚠️</span>
+            <h4 className="font-semibold text-slate-100">Risks to watch</h4>
+          </div>
+          <div className="space-y-2">
+            {view.risks.map((r, i) => (
+              <div key={i} className="flex gap-3 rounded-lg border border-amber-400/15 bg-amber-400/[0.04] px-3 py-2">
+                <span className="text-amber-400 text-sm shrink-0">⚡</span>
+                <p className="text-sm text-amber-100/90 leading-relaxed">{r}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Location basis (collapsed details) ── */}
+      {view._basis && (
+        <details className="card p-0 overflow-hidden">
+          <summary className="px-4 py-3 cursor-pointer text-xs font-medium text-slate-400 hover:text-slate-200 select-none flex items-center gap-2">
+            <span>🗺️</span>
+            <span>Why this crop was chosen · location &amp; field data</span>
+            <span className="ml-auto text-[10px] text-slate-600">expand</span>
+          </summary>
+          <div className="border-t border-white/5 px-4 py-3">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+              <BasisCell k="Season"      v={view._basis.season ?? "—"} />
+              <BasisCell k="Soil"        v={`${view._basis.soil ?? "?"}${view._basis.soilSource === "farm-record" ? " (farm)" : " (geo)"}`} />
+              <BasisCell k="Coordinates" v={view._basis.latitude != null ? `${view._basis.latitude.toFixed(3)}, ${view._basis.longitude?.toFixed(3)}` : "—"} />
+              <BasisCell k="Rain (7d)"   v={view._basis.rain7dMm != null ? `${Math.round(view._basis.rain7dMm)} mm` : "—"} />
+            </div>
+          </div>
+        </details>
+      )}
+
+      {/* ── Arize panel ── */}
+      <ArizePanel arize={view.arize} traceId={rec.traceId} modelServed={view._modelServed}
+        evalScore={view.evalScore ?? rec.evalScore ?? undefined}
+        evalDetails={view.evalDetails ?? rec.evalDetails ?? undefined}
+        evalJudge={view.evalJudge ?? rec.evalJudge ?? undefined} />
+
+      {/* ── Footer ── */}
+      <div className="flex items-center justify-between text-[11px] text-slate-600 px-1">
+        <span>rec <code className="text-slate-500">{rec.id.slice(0, 10)}…</code></span>
+        {rec.traceId && <span>trace <code className="text-slate-500">{rec.traceId.slice(0, 16)}…</code></span>}
+      </div>
+    </div>
+  );
+}
+
