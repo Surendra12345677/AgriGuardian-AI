@@ -1,13 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { api, type Farm } from "@/lib/api";
+import { api, type EvalTrendPoint, type Farm } from "@/lib/api";
 import FarmForm from "@/components/FarmForm";
 import FarmList from "@/components/FarmList";
 import EditFarmCard from "@/components/EditFarmCard";
 import AgentPanel from "@/components/AgentPanel";
 import { EvalQualityCard } from "@/components/EvalQualityCard";
-import FeedbackLoop from "@/components/FeedbackLoop";
 import Hero from "@/components/Hero";
 import PartnerStrip from "@/components/PartnerStrip";
 import HowItWorks from "@/components/HowItWorks";
@@ -15,6 +14,7 @@ import WhatIfScenarios from "@/components/WhatIfScenarios";
 import PlantDoctor from "@/components/PlantDoctor";
 import LanguageSelector, { type Lang } from "@/components/LanguageSelector";
 import { useHashRoute } from "@/components/Navbar";
+import { ArizeInsights } from "@/components/ArizeInsights";
 
 /* ── Step model — used both by the breadcrumb strip and the navigation hash. */
 const STEPS = [
@@ -245,8 +245,7 @@ export default function HomePage() {
                   <EvalQualityCard />
                 </div>
               </div>
-              {/* Feedback loop — collapsed by default, expandable */}
-              <CollapsibleFeedback />
+              <HowToImproveNextPlan />
             </div>
           ) : (
             <NeedFarmCard onGo={() => navigate("onboard")} label="Save a farm first to enable the planner." />
@@ -507,32 +506,82 @@ function NeedFarmCard({ label, onGo }: { label: string; onGo: () => void }) {
   );
 }
 
-/** Regression-test panel — hidden by default so it doesn't clutter the page.
- *  Judges can expand it to demo the full Arize-style feedback loop. */
-function CollapsibleFeedback() {
-  const [open, setOpen] = useState(false);
+function HowToImproveNextPlan() {
+  const [latest, setLatest] = useState<EvalTrendPoint | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let stopped = false;
+
+    async function refreshLatest() {
+      try {
+        const trend = await api.evalTrend(1);
+        if (!stopped) setLatest(trend.series[0] ?? null);
+      } catch {
+        if (!stopped) setLatest(null);
+      } finally {
+        if (!stopped) setLoading(false);
+      }
+    }
+
+    refreshLatest();
+    const id = setInterval(refreshLatest, 6000);
+    return () => {
+      stopped = true;
+      clearInterval(id);
+    };
+  }, []);
+
+  const hasEval = !!latest?.evalDetails || latest?.evalScore != null;
+  const updatedLabel = latest?.createdAt ? formatUpdatedLabel(latest.createdAt) : null;
+
   return (
-    <div>
-      <button
-        onClick={() => setOpen(o => !o)}
-        className="w-full flex items-center justify-between gap-2 card px-4 py-3 text-sm
-                   text-slate-300 hover:text-slate-100 hover:border-emerald-400/30 transition"
-      >
-        <div className="flex items-center gap-2">
-          <span className="text-base">🔁</span>
-          <span className="font-medium">Arize feedback loop — failed traces → regression tests</span>
-          <span className="text-[10px] px-1.5 py-0.5 rounded bg-violet-400/15 text-violet-300 font-semibold uppercase tracking-wider">
-            Arize-style
-          </span>
+    <section className="card p-5 space-y-3">
+      <div className="text-[11px] uppercase tracking-[0.15em] text-amber-400/90 font-semibold">
+        How to improve your next plan
+      </div>
+      {loading ? (
+        <p className="text-sm text-slate-400">Loading Arize quality insights...</p>
+      ) : hasEval ? (
+        <div className="space-y-3">
+          <p className="text-sm text-slate-300 leading-relaxed">
+            Live guidance from your latest Arize-scored plan{updatedLabel ? ` (${updatedLabel})` : ""}.
+          </p>
+          <ArizeInsights
+            evalDetails={latest?.evalDetails ?? null}
+            evalScore={latest?.evalScore ?? null}
+            evalJudge={latest?.judge ?? null}
+          />
         </div>
-        <span className="text-slate-500 text-xs">{open ? "▲ hide" : "▼ show"}</span>
-      </button>
-      {open && (
-        <div className="mt-2">
-          <FeedbackLoop />
-        </div>
+      ) : (
+        <p className="text-sm text-slate-400">
+          Run a plan once to see Arize-backed improvement steps here.
+        </p>
       )}
-    </div>
+    </section>
+  );
+}
+
+function formatUpdatedLabel(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const date = new Intl.DateTimeFormat(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+  }).format(d);
+  const time = new Intl.DateTimeFormat(undefined, {
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(d);
+  return isSameLocalDate(d, new Date()) ? `updated today at ${time}` : `updated ${date}, ${time}`;
+}
+
+function isSameLocalDate(a: Date, b: Date): boolean {
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
   );
 }
 

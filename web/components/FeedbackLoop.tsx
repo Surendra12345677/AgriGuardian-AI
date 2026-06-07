@@ -30,6 +30,15 @@ const FAILURE_MODE_LABELS: Record<string, string> = {
   other:               "Other",
 };
 
+const FAILURE_MODE_HINTS: Record<string, string> = {
+  wrong_tool_sequence: "Agent called tools in the wrong order",
+  missed_retrieval:    "Agent didn't fetch data it needed",
+  stale_context:       "Agent used outdated/cached data",
+  skipped_validation:  "Agent skipped a required check",
+  bad_answer:          "Answer was factually wrong or unhelpful",
+  other:               "Doesn't fit the other categories",
+};
+
 export default function FeedbackLoop() {
   const [threshold, setThreshold] = useState(0.6);
   const [items, setItems] = useState<FeedbackFailure[]>([]);
@@ -94,16 +103,16 @@ export default function FeedbackLoop() {
   }
 
   return (
-    <div className="card p-5 lg:p-6 space-y-4">
+    <div className="card p-6 lg:p-7 space-y-5">
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
-          <div className="text-[10px] uppercase tracking-[0.18em] text-emerald-300/80 font-semibold">
+          <div className="text-[11px] uppercase tracking-[0.18em] text-emerald-300/90 font-semibold">
             Arize-style feedback loop
           </div>
-          <h3 className="font-semibold text-slate-100 text-lg flex items-center gap-2 mt-1">
+          <h3 className="font-semibold text-slate-100 text-xl flex items-center gap-2.5 mt-1.5">
             <span aria-hidden>🔁</span> Failed traces → regression tests
           </h3>
-          <p className="text-xs text-slate-400 mt-0.5 max-w-2xl">
+          <p className="text-[13px] text-slate-400 mt-1.5 max-w-2xl leading-relaxed">
             The agent surfaces its own low-scoring runs here. Label the failure mode,
             describe what the agent should have done, then <em>replay</em> the exact
             same inputs to verify the next prompt / model / tool change actually fixes
@@ -112,21 +121,23 @@ export default function FeedbackLoop() {
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <label className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold">
-            Threshold
+            Show scores below
           </label>
           <select
             value={threshold}
             onChange={e => setThreshold(parseFloat(e.target.value))}
-            className="input !py-1.5 !px-2 !w-auto text-sm"
+            className="input !py-2 !px-3 !w-auto text-sm"
           >
-            {[0.4, 0.5, 0.6, 0.7, 0.8].map(t => (
-              <option key={t} value={t}>&lt; {t.toFixed(2)}</option>
-            ))}
+            <option value={0.4}>{"< 0.40 — Critical only"}</option>
+            <option value={0.5}>{"< 0.50 — Low scoring"}</option>
+            <option value={0.6}>{"< 0.60 — Below passing"}</option>
+            <option value={0.7}>{"< 0.70 — Needs review"}</option>
+            <option value={0.8}>{"< 0.80 — All imperfect"}</option>
           </select>
           <button
             onClick={refresh}
             disabled={loading}
-            className="btn-ghost text-xs"
+            className="btn-ghost text-sm"
           >
             {loading ? "Loading…" : "↻ Refresh"}
           </button>
@@ -134,15 +145,45 @@ export default function FeedbackLoop() {
       </div>
 
       {error && (
-        <div className="rounded-lg border border-red-400/30 bg-red-400/[0.04] p-3 text-sm text-red-200">
+        <div className="rounded-lg border border-red-400/30 bg-red-400/[0.06] p-4 text-[13px] text-red-200">
           {error}
         </div>
       )}
 
+      {/* Summary stats bar */}
+      {!loading && !error && (
+        <div className="grid grid-cols-3 gap-3">
+          <div className="rounded-xl bg-white/[0.04] border border-white/[0.08] px-4 py-3 text-center">
+            <div className={`text-[20px] font-black tabular-nums ${items.length === 0 ? "text-emerald-300" : "text-amber-300"}`}>
+              {items.length}
+            </div>
+            <div className="text-[11px] text-slate-500 mt-1">Failing traces</div>
+          </div>
+          <div className="rounded-xl bg-white/[0.04] border border-white/[0.08] px-4 py-3 text-center">
+            <div className="text-[20px] font-black tabular-nums text-slate-300">
+              {items.filter(f => f.failureMode).length}/{items.length}
+            </div>
+            <div className="text-[11px] text-slate-500 mt-1">Labelled</div>
+          </div>
+          <div className="rounded-xl bg-white/[0.04] border border-white/[0.08] px-4 py-3 text-center">
+            <div className="text-[20px] font-black tabular-nums text-violet-300">
+              {Object.keys(replays).length}
+            </div>
+            <div className="text-[11px] text-slate-500 mt-1">Replays run</div>
+          </div>
+        </div>
+      )}
+
       {items.length === 0 && !loading && (
-        <div className="rounded-xl border border-emerald-400/20 bg-emerald-400/[0.04] p-4 text-sm text-emerald-200/90 flex items-center gap-2">
-          <span aria-hidden>✓</span>
-          No failing traces below {threshold.toFixed(2)} — the agent is currently passing its own evals.
+        <div className="rounded-xl border border-emerald-400/30 bg-emerald-400/[0.06] p-6 text-center space-y-2">
+          <div className="text-3xl">✅</div>
+          <div className="text-[15px] font-semibold text-emerald-200">All plans passing!</div>
+          <p className="text-[13px] text-emerald-400/80">
+            No eval scores below {threshold.toFixed(2)} — the agent is currently meeting quality thresholds.
+          </p>
+          <p className="text-[12px] text-slate-500 mt-2">
+            Try raising the threshold to see plans that may need review.
+          </p>
         </div>
       )}
 
@@ -185,9 +226,15 @@ export default function FeedbackLoop() {
                   >
                     <option value="">— pick one —</option>
                     {taxonomy.map(m => (
-                      <option key={m} value={m}>{FAILURE_MODE_LABELS[m] ?? m}</option>
+                      <option key={m} value={m} title={FAILURE_MODE_HINTS[m]}>
+                        {FAILURE_MODE_LABELS[m] ?? m}
+                        {FAILURE_MODE_HINTS[m] ? ` — ${FAILURE_MODE_HINTS[m]}` : ""}
+                      </option>
                     ))}
                   </select>
+                  {d.failureMode && FAILURE_MODE_HINTS[d.failureMode] && (
+                    <p className="mt-1 text-[10px] text-slate-500 italic">{FAILURE_MODE_HINTS[d.failureMode]}</p>
+                  )}
                 </label>
                 <label className="block">
                   <span className="label">Expected behaviour</span>
@@ -211,30 +258,55 @@ export default function FeedbackLoop() {
                 <button
                   onClick={() => replay(f.id)}
                   disabled={replaying || noSnapshot}
-                  title={noSnapshot ? "This older recommendation has no captured request snapshot — re-run a fresh plan to capture one." : "Re-run the exact same inputs through the agent"}
+                  title={noSnapshot
+                    ? "This recommendation has no request snapshot — run a fresh plan first to enable replay"
+                    : "Re-run the exact same inputs through the agent and compare the new score"}
                   className="btn-primary text-xs !py-1.5 !px-3 disabled:opacity-50"
                 >
                   {replaying ? "Replaying…" : "▶ Replay as regression test"}
                 </button>
-                {r && (
-                  <div className="flex items-center gap-2 text-xs">
-                    <ScoreBadge label="replay" value={r.replayScore} />
-                    <DeltaPill delta={r.delta} improved={r.improved} />
-                    <code className="text-[10px] text-slate-500">→ {r.replayId.slice(0, 12)}…</code>
-                  </div>
-                )}
                 {noSnapshot && (
-                  <span className="text-[11px] text-slate-500 italic">
-                    No request snapshot on this older record — run a fresh plan to enable replay.
+                  <span className="text-[11px] text-amber-400/70 italic flex items-center gap-1">
+                    <span>⚠</span>
+                    <span>Run a fresh plan to capture a snapshot and enable replay</span>
                   </span>
                 )}
               </div>
+              {/* Replay result — shown after a replay completes */}
+              {r && (
+                <div className="rounded-lg border border-violet-400/20 bg-violet-400/[0.04] p-3 space-y-2">
+                  <div className="text-[10px] uppercase tracking-wider text-violet-300 font-semibold">Replay result</div>
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <ScoreBadge label="original" value={f.evalScore} />
+                    <span className="text-slate-600 text-sm">→</span>
+                    <ScoreBadge label="replay" value={r.replayScore} />
+                    <DeltaPill delta={r.delta} improved={r.improved} />
+                  </div>
+                  {r.replayScore == null && (
+                    <p className="text-[10px] text-slate-500 italic">
+                      Eval score is being calculated — refresh in a few seconds.
+                    </p>
+                  )}
+                  {r.delta != null && (
+                    <p className="text-[11px] text-slate-400">
+                      {r.improved
+                        ? "✅ Score improved — the change helped!"
+                        : r.delta === 0
+                          ? "→ Score unchanged — change had no effect on this trace."
+                          : "⚠️ Score got worse — revert or investigate further."}
+                    </p>
+                  )}
+                  <div className="text-[10px] text-slate-600">
+                    Replay ID: <code className="text-slate-500 font-mono">{r.replayId.slice(0, 16)}…</code>
+                  </div>
+                </div>
+              )}
             </li>
           );
         })}
       </ul>
 
-      <p className="text-[11px] text-slate-500 leading-relaxed pt-2 border-t border-white/5">
+      <p className="text-[12px] text-slate-500 leading-relaxed pt-3 border-t border-white/5">
         Inspired by the workflow Arize describes for their <em>Alyx</em> engineering agent —
         save the trace before changing the prompt, label the failure mode, and replay after each
         change to measure improvement instead of guessing.
@@ -259,7 +331,12 @@ function ScoreBadge({ label, value }: { label: string; value: number | null }) {
 }
 
 function DeltaPill({ delta, improved }: { delta: number | null; improved: boolean }) {
-  if (delta == null) return <span className="text-slate-500 text-[11px]">no eval score</span>;
+  if (delta == null) return (
+    <span className="inline-flex items-center gap-1 rounded-md border border-slate-400/20 px-2 py-1 text-[11px] font-mono text-slate-500 bg-white/[0.03]">
+      <span className="h-1.5 w-1.5 rounded-full bg-slate-500 animate-pulse" />
+      <span>scoring…</span>
+    </span>
+  );
   const pct = Math.round(delta * 100);
   const sign = pct > 0 ? "+" : "";
   const tone = improved

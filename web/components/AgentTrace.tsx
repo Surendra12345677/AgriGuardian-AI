@@ -96,17 +96,17 @@ export function AgentTrace({
   const spanCount  = 9; // OTel spans (plan + 5 tools + generate + reflect + persist)
 
   return (
-    <div className="card p-4">
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <span className="chip">agent.run</span>
-          <span className="text-xs text-slate-400">
+    <div className="card p-5">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2.5">
+          <span className="chip text-[11px]">agent.run</span>
+          <span className="text-[12px] text-slate-400 font-medium">
             {running ? "executing…" : finished ? "completed" : errored ? "failed" : "idle"}
           </span>
         </div>
-        <div className="flex items-center gap-2 text-[11px] font-mono">
+        <div className="flex items-center gap-3 text-[11px] font-mono">
           {running && (
-            <span className="text-emerald-300 tabular-nums">{elapsed}s elapsed</span>
+            <span className="text-emerald-300 tabular-nums font-semibold">{elapsed}s elapsed</span>
           )}
           <span className="text-slate-500">{spanCount} spans · OTLP → Arize</span>
         </div>
@@ -114,23 +114,23 @@ export function AgentTrace({
 
       {/* Live status bar */}
       {running && activeStep && (
-        <div className="mb-3 rounded-lg border border-emerald-400/20 bg-emerald-400/[0.05] px-3 py-2 flex items-center gap-2">
-          <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse flex-shrink-0" />
-          <span className="text-[12px] text-emerald-200 font-medium">{activeStep.label}</span>
-          <span className="text-[11px] text-slate-400 truncate">— {activeStep.hint}</span>
+        <div className="mb-4 rounded-lg border border-emerald-400/30 bg-emerald-400/[0.08] px-4 py-2.5 flex items-center gap-2.5">
+          <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse flex-shrink-0" />
+          <span className="text-[13px] text-emerald-100 font-semibold">{activeStep.label}</span>
+          <span className="text-[12px] text-slate-400 truncate">— {activeStep.hint}</span>
         </div>
       )}
 
       {/* Parallel tools banner */}
       {running && activeIdx >= PIPELINE.findIndex(s => s.key === "arize.mcp") &&
                   activeIdx <= PIPELINE.findIndex(s => s.key === "mongo.mcp") && (
-        <div className="mb-2 text-[10px] text-slate-500 font-mono px-1 flex items-center gap-1.5">
-          <span className="text-violet-400">⚡</span>
-          <span>Tools running in <span className="text-violet-300">parallel</span></span>
+        <div className="mb-3 text-[11px] text-slate-500 font-mono px-1 flex items-center gap-2">
+          <span className="text-violet-400 text-base">⚡</span>
+          <span>Tools running in <span className="text-violet-300 font-semibold">parallel</span></span>
         </div>
       )}
 
-      <ol className="space-y-1.5">
+      <ol className="space-y-2">
         {PIPELINE.map((s, i) => {
           let status: Status = "idle";
           const isParallel = PARALLEL_TOOL_KEYS.has(s.key);

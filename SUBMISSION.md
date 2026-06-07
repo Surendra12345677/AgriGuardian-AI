@@ -13,7 +13,7 @@
 - **Date:** May 2026
 
 ---
-
+****
 ## 0. Submission compliance snapshot
 
 | Requirement from official rules | Status | Where it is satisfied |

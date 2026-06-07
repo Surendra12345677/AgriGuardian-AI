@@ -56,11 +56,11 @@ class AgentOrchestratorTest {
         assertThat(result.getId()).isEqualTo("saved-1");
         assertThat(result.getFarmId()).isEqualTo("farm-1");
 
-        // Tools now run in parallel — verify each was called exactly once
-        // (no in-order constraint; Gemini and save must follow tools).
+        // Tools now run in parallel — verify each was called
+        // Market tool is now called multiple times (once per shortlist crop for market intelligence)
         verify(weather, times(1)).invoke(any());
         verify(soil,    times(1)).invoke(any());
-        verify(market,  times(1)).invoke(any());
+        verify(market,  atLeastOnce()).invoke(any());  // called for each crop in shortlist
         // Gemini and persist must happen after all tools finish.
         verify(gemini, times(1)).generate(any(), any(), any());
         verify(repo,   times(1)).save(any(Recommendation.class));
