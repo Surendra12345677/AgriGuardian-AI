@@ -224,13 +224,14 @@ public class AgentOrchestrator {
                 // Plan rationale (Arize partner-track integration first):
                 //   1. arize.mcp — retrieve evaluation history of similar past
                 //      runs to inform reasoning (partner-track qualifier).
-                //   2. weather / soil / market — ground-truth data tools.
+                //   2. weather / soil — ground-truth data tools.
+                //      market runs after shortlist selection so it prices a real
+                //      candidate crop (preferred or anchor), not an empty placeholder.
                 //   3. mongo.mcp — persist the resulting plan (action tool).
                 List<String> p = new java.util.ArrayList<>();
                 if (tools.has("arize.mcp")) p.add("arize.mcp");
                 p.add("weather");
                 p.add("soil");
-                p.add("market");
                 if (tools.has("mongo.mcp")) p.add("mongo.mcp");
                 plan = List.copyOf(p);
                 planSpan.setAttribute(AttributeKey.stringArrayKey("plan.tools"), plan);
@@ -266,17 +267,6 @@ public class AgentOrchestrator {
                 args.put("crop",      req.preferredCrop() == null ? "" : req.preferredCrop());
                 if (farmSoil  != null) args.put("soilType",          farmSoil);
                 if (farmWater != null) args.put("waterAvailability", farmWater);
-                if ("market".equals(toolName)) {
-                    // Pass projected HARVEST date so market prices reflect what the
-                    // farmer will see at selling time, not at planting time.
-                    // PRE-KHARIF / KHARIF (sow Jun): harvest ~4 months after sowing
-                    // RABI  (sow Nov–Dec): harvest ~4 months after sowing
-                    // ZAID  (sow Apr): short-season crops, harvest ~2 months out
-                    int harvestMonthsAhead = (currentMonth >= 5 && currentMonth <= 10) ? 4
-                            : (currentMonth == 11 || currentMonth == 12 || currentMonth <= 3) ? 4
-                            : 2;
-                    args.put("date", today.plusMonths(harvestMonthsAhead).toString());
-                }
                 if ("arize.mcp".equals(toolName)) {
                     args.put("operation", "search_traces");
                     args.put("query",
@@ -469,6 +459,11 @@ public class AgentOrchestrator {
                     req.longitude() == null ? 78.0 : req.longitude(),
                     rain7, soilHint, req.scenario());
 
+            // Keep shortlist purely agronomic. We now run exactly one market lookup
+            // for a concrete candidate crop so tool.market is meaningful and we avoid
+            // N x Gemini fan-out from per-crop pricing calls.
+            List<String> rankedShortlist = shortlist;
+
             // Deterministic per-coordinate "anchor" crop. Without this, the
             // same season+soil combo (e.g. ZAID + BLACK) returns the same
             // shortlist for every farm and Gemini consistently picks the
@@ -477,15 +472,75 @@ public class AgentOrchestrator {
             // looking at my location". Hashing lat/lon (rounded to ~1 km)
             // into the shortlist guarantees that a meaningful pin move
             // produces a different anchor recommendation.
-            String anchorCrop = pickAnchorCrop(shortlist,
+            // Anchor remains deterministic + location-specific.
+            String anchorCrop = pickAnchorCrop(rankedShortlist,
                     req.latitude()  == null ? 0.0 : req.latitude(),
                     req.longitude() == null ? 0.0 : req.longitude(),
                     currentMonth);
+
+            // Resolve one concrete market quote. This is not "known beforehand";
+            // it is derived from request/runtime context: farmer preference first,
+            // otherwise the first agronomic shortlist candidate.
+            String marketCrop;
+            String marketCropBasis;
+            if (req.preferredCrop() != null && !req.preferredCrop().isBlank()) {
+                marketCrop = req.preferredCrop().trim().toLowerCase(java.util.Locale.ROOT);
+                marketCropBasis = "preferredCrop";
+            } else if (!rankedShortlist.isEmpty()) {
+                marketCrop = String.valueOf(rankedShortlist.get(0)).toLowerCase(java.util.Locale.ROOT);
+                marketCropBasis = "shortlist[0]";
+            } else {
+                marketCrop = anchorCrop;
+                marketCropBasis = "anchorCrop";
+            }
+            int harvestMonthsAhead = (currentMonth >= 5 && currentMonth <= 10) ? 4
+                    : (currentMonth == 11 || currentMonth == 12 || currentMonth <= 3) ? 4
+                    : 2;
+            String harvestDate = today.plusMonths(harvestMonthsAhead).toString();
+            Map<String, Object> marketData = Map.of();
+            if (!marketCrop.isBlank()) {
+                Span marketSpan = tracer.spanBuilder("tool.market")
+                        .setAttribute(AttributeKey.stringKey("openinference.span.kind"), "TOOL")
+                        .setAttribute(AttributeKey.stringKey("tool.name"), "market")
+                        .setAttribute(AttributeKey.stringKey("market.crop.target"), marketCrop)
+                        .startSpan();
+                try (var ms = marketSpan.makeCurrent()) {
+                    Map<String, Object> mArgs = new LinkedHashMap<>();
+                    mArgs.put("crop", marketCrop);
+                    mArgs.put("date", harvestDate);
+                    mArgs.put("latitude", req.latitude());
+                    mArgs.put("longitude", req.longitude());
+                    marketData = tools.require("market").invoke(mArgs);
+                    toolOutputs.put("market", marketData);
+                    marketSpan.setAttribute(AttributeKey.stringKey("tool.source"),
+                            String.valueOf(marketData.getOrDefault("source", "n/a")));
+                } catch (Exception ex) {
+                    log.warn("tool.market failed for crop={}: {}", marketCrop, ex.toString());
+                    marketSpan.recordException(ex);
+                } finally {
+                    marketSpan.end();
+                }
+            }
 
             // Build a rich, context-grounded user prompt. All decision-relevant
             // data (date, location, soil, weather, market, shortlist) is injected
             // here so Gemini can apply its full agricultural intelligence —
             // not a hardcoded rulebook.
+            // Build market insights summary for the prompt from the single quoted crop.
+            StringBuilder marketInsights = new StringBuilder();
+            if (!marketData.isEmpty()) {
+                String trend = String.valueOf(marketData.getOrDefault("trend", "stable"));
+                Object priceRaw = marketData.get("pricePerQuintalINR");
+                int price = (priceRaw instanceof Number n) ? n.intValue() : 0;
+                String peak = String.valueOf(marketData.getOrDefault("peakMonth", ""));
+                String insight = String.valueOf(marketData.getOrDefault("marketInsight", ""));
+                marketInsights.append(String.format("\n  • targetCrop=%s (chosen via %s): ₹%d/q, trend=%s, peak=%s%s",
+                        marketCrop, marketCropBasis, price, trend, peak,
+                        insight.isBlank() || insight.equals("null") ? "" : " — " + insight));
+            } else {
+                marketInsights.append("\n  • (market quote unavailable; use conservative assumptions)");
+            }
+
             String userPrompt = """
                     FARM CONTEXT
                     ============
@@ -498,21 +553,24 @@ public class AgentOrchestrator {
                     Farmer preference: %s
                     Reply language: %s
 
-                    DECISION GUIDANCE (computed from this farm's exact coordinates + live data)
-                    ============================================================================
-                    candidateShortlist  = %s
-                    locationAnchorCrop  = %s   ← derived deterministically from lat/lon so each farm
-                                                   gets a unique recommendation; use this unless the
-                                                   live soil/weather data strongly suggests another crop.
+                    MARKET INTELLIGENCE (at harvest time ~%d months ahead)
+                    ======================================================%s
+
+                    DECISION CONTEXT (computed from this farm's coordinates + live data)
+                    ====================================================================
+                    candidateShortlist = %s
+                    locationAnchorCrop = %s
 
                     INSTRUCTIONS
                     ============
                     1. Choose the BEST single crop from candidateShortlist for this farm right now.
                     2. If farmer preference is set, use it as the crop.
-                    3. Use the weather, soil and market data in the Context section to make every
+                    3. Use the market quote in MARKET INTELLIGENCE as a grounding reference.
+                       If you pick a different crop than targetCrop, explain why clearly.
+                    4. Use the weather, soil and market data in the Context section to make every
                        figure in "impact" realistic and grounded — not generic.
-                    4. Write advice that mentions the actual soil type, rainfall and season.
-                    5. Tasks must be day-numbered and actionable for this specific crop and soil.
+                    5. Write advice that mentions the actual soil type, rainfall, season AND market trend.
+                    6. Tasks must be day-numbered and actionable for this specific crop and soil.
                     """.formatted(
                             req.farmId(),
                             todayStr, season,
@@ -522,7 +580,9 @@ public class AgentOrchestrator {
                             req.scenario() == null ? "BASELINE" : req.scenario(),
                             req.preferredCrop() == null ? "(none — choose best from shortlist)" : req.preferredCrop(),
                             langName,
-                            shortlist,
+                            harvestMonthsAhead,
+                            marketInsights.toString(),
+                            rankedShortlist,
                             anchorCrop
                     );
 
@@ -555,6 +615,8 @@ public class AgentOrchestrator {
                     fastBasis.put("forecastDays",forecastDays);
                     fastBasis.put("shortlist",   shortlist);
                     fastBasis.put("anchorCrop",  anchorCrop);
+                    fastBasis.put("marketTargetCrop", marketCrop);
+                    fastBasis.put("marketTargetBasis", marketCropBasis);
                     fastBasis.put("fastPath",    true);
                     reflected = injectBasis(reconciled, fastBasis);
                 } finally { fast.end(); }
@@ -579,8 +641,10 @@ public class AgentOrchestrator {
                     basis.put("tempAvgC",    tempAvgC);
                     basis.put("humidity",    humidity);
                     basis.put("forecastDays",forecastDays);
-                    basis.put("shortlist",   shortlist);
+                    basis.put("shortlist",   rankedShortlist);
                     basis.put("anchorCrop",  anchorCrop);
+                    basis.put("marketTargetCrop", marketCrop);
+                    basis.put("marketTargetBasis", marketCropBasis);
                     reflected = injectBasis(reconciled, basis);
                 } finally { reflectSpan.end(); }
             }
@@ -1055,5 +1119,6 @@ public class AgentOrchestrator {
         if (v > 1) return Math.min(1.0, v / 100.0); // tolerate 0..100 inputs
         return v;
     }
+
 }
 

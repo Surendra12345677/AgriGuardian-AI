@@ -103,11 +103,12 @@ echo "==> Pushing secrets to Secret Manager"
 upsert_secret "agriguardian-mongodb-uri" "$MONGODB_URI"
 upsert_secret "agriguardian-gemini-key"  "$GEMINI_API_KEY"
 upsert_secret "agriguardian-arize-key"   "$ARIZE_API_KEY"
+upsert_secret "agriguardian-arize-space" "$ARIZE_SPACE_ID"
 
 PROJECT_NUMBER="$(gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)')"
 RUNTIME_SA="${PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
 echo "==> Granting secretAccessor to $RUNTIME_SA"
-for s in agriguardian-mongodb-uri agriguardian-gemini-key agriguardian-arize-key; do
+for s in agriguardian-mongodb-uri agriguardian-gemini-key agriguardian-arize-key agriguardian-arize-space; do
   gcloud secrets add-iam-policy-binding "$s" \
       --member="serviceAccount:$RUNTIME_SA" \
       --role="roles/secretmanager.secretAccessor" \
@@ -140,8 +141,8 @@ done
 # ── 1/2  Backend (Spring Boot) ──────────────────────────────────────
 # Use a custom delimiter (gcloud `^|^` prefix) so commas inside
 # GEMINI_FALLBACK_MODELS don't break --set-env-vars parsing.
-BACKEND_ENV="^|^SPRING_PROFILES_ACTIVE=prod|GEMINI_MODEL=$GEMINI_MODEL|GEMINI_FALLBACK_MODELS=$GEMINI_FALLBACK_MODELS|GEMINI_STUB_MODE=auto|ARIZE_ENABLED=true|ARIZE_SPACE_ID=$ARIZE_SPACE_ID|ARIZE_OTLP_ENDPOINT=$ARIZE_OTLP_ENDPOINT|AGRIGUARDIAN_ARIZE_PROJECT_NAME=agriguardian-ai|MCP_ARIZE_ENABLED=false|MCP_MONGODB_ENABLED=false"
-BACKEND_SECRETS="MONGODB_URI=agriguardian-mongodb-uri:latest,SPRING_DATA_MONGODB_URI=agriguardian-mongodb-uri:latest,GEMINI_API_KEY=agriguardian-gemini-key:latest,ARIZE_API_KEY=agriguardian-arize-key:latest"
+BACKEND_ENV="^|^SPRING_PROFILES_ACTIVE=prod|GEMINI_MODEL=$GEMINI_MODEL|GEMINI_FALLBACK_MODELS=$GEMINI_FALLBACK_MODELS|GEMINI_STUB_MODE=auto|ARIZE_ENABLED=true|ARIZE_OTLP_ENDPOINT=$ARIZE_OTLP_ENDPOINT|AGRIGUARDIAN_ARIZE_PROJECT_NAME=agriguardian-ai|MCP_ARIZE_ENABLED=false|MCP_MONGODB_ENABLED=false"
+BACKEND_SECRETS="MONGODB_URI=agriguardian-mongodb-uri:latest,SPRING_DATA_MONGODB_URI=agriguardian-mongodb-uri:latest,GEMINI_API_KEY=agriguardian-gemini-key:latest,ARIZE_API_KEY=agriguardian-arize-key:latest,ARIZE_SPACE_ID=agriguardian-arize-space:latest"
 
 echo "==> [1/2] Building + deploying BACKEND ($BACKEND_SERVICE)"
 ( cd "$ROOT_DIR" && gcloud run deploy "$BACKEND_SERVICE" \

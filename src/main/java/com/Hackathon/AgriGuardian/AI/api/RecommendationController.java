@@ -12,6 +12,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 import java.util.NoSuchElementException;
 
 @RestController
@@ -51,7 +52,10 @@ public class RecommendationController {
                 r.getConfidenceScore(),
                 List.of(), // tasks generation lives in a future ticket
                 r.getCreatedAt(),
-                r.getTraceId()
+                r.getTraceId(),
+                r.getEvalScore(),
+                r.getEvalDetails(),
+                r.getEvalJudge()
         );
     }
 }

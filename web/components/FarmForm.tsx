@@ -18,7 +18,7 @@ const SOIL_LABELS: Record<typeof SOIL[number], string> = {
   LOAM:  "Loam — balanced",
   CLAY:  "Clay — heavy, wet",
   SANDY: "Sandy — dry, fast drain",
-  BLACK: "Black Cotton — rich, expansive",
+  BLACK: "Black Soil (Black Cotton) — rich, expansive",
   RED:   "Red Laterite — acidic, light",
 };
 

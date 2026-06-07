@@ -5,6 +5,7 @@ import { AgentTrace } from "./AgentTrace";
 import { type Lang } from "./LanguageSelector";
 import ImpactDashboard, { type Impact } from "./ImpactDashboard";
 import FarmMap from "./FarmMap";
+import { ArizeInsights } from "./ArizeInsights";
 type Parsed = {
   advice?: string;
   crop?: string;
@@ -278,12 +279,20 @@ export default function AgentPanel({
           </p>
         ) : (
           <div className="mt-4 flex gap-2 items-end flex-wrap">
+            {/*
+              Preferred crop is an OPTIONAL override for the agent's recommendation.
+              This is NOT market data input — the "market tool" is an internal tool that
+              Gemini calls to fetch live mandi/commodity prices for income estimates.
+              This field lets you suggest a crop variety; the agent will re-plan with
+              that preference included, still pulling fresh market prices via the tool.
+            */}
             <label className="text-xs text-slate-400 flex-1 space-y-1 block min-w-[200px]">
               <span className="label">Preferred crop (optional)</span>
               <input className="input"
                      placeholder="e.g. wheat, maize, soybean, onion"
                      value={crop}
-                     onChange={e => setCrop(e.target.value)} />
+                     onChange={e => setCrop(e.target.value)}
+                     title="Optional: suggest a crop. Leave empty for AI to choose. This triggers a fresh plan with market prices." />
             </label>
             <button onClick={() => ask()} disabled={busy} className="btn-primary text-base !py-2.5 !px-5">
               {busy
@@ -292,7 +301,7 @@ export default function AgentPanel({
             </button>            <button
               onClick={() => ask({ forceLive: true })}
               disabled={busy}
-              title="Skip the result cache and force a fresh Gemini call"
+              title="Skip the result cache and force a fresh Gemini call with live weather, soil, and market prices (mandi rates)"
               className="text-sm px-4 py-2.5 rounded-lg border border-emerald-400/30 text-emerald-200 hover:bg-emerald-400/[0.06] disabled:opacity-50"
             >
               ⟳ Force live
@@ -309,16 +318,28 @@ export default function AgentPanel({
         {busy && (
           <div className="mt-3 space-y-1.5">
             <div className="flex items-center justify-between text-[11px] text-slate-400">
-              <span>🤖 Gemini is analysing weather, soil &amp; market data…</span>
+              <span>{
+                liveElapsed < 8  ? "🌐 Fetching live weather & soil data…"
+                : liveElapsed < 20 ? "🤖 Gemini is analysing your farm profile…"
+                : liveElapsed < 40 ? "📊 Calculating market prices & yield forecast…"
+                : liveElapsed < 65 ? "✍️ Writing your personalised season plan…"
+                : "⏳ Almost there — finalising the plan…"
+              }</span>
               <span className="tabular-nums text-emerald-300 font-semibold">{liveElapsed}s</span>
             </div>
-            <div className="h-1 w-full rounded-full bg-white/[0.06] overflow-hidden">
+            <div className="h-1.5 w-full rounded-full bg-white/[0.06] overflow-hidden">
               <div
-                className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-cyan-400 transition-all duration-1000"
-              style={{ width: `${Math.min(95, (liveElapsed / 50) * 100)}%` }}
-            />
+                className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-cyan-400 transition-all duration-500"
+                style={{ width: `${Math.min(97, (liveElapsed / 80) * 100)}%` }}
+              />
             </div>
-            <p className="text-[10px] text-slate-500">Typically 40–50 s (market prices via Gemini) · result appears automatically</p>
+            <p className="text-[10px] text-slate-500">
+              {liveElapsed < 15
+                ? "Step 1 of 3 · live weather, soil & market tools running in parallel"
+                : liveElapsed < 45
+                ? "Step 2 of 3 · Gemini multi-step reasoning loop (plan → tools → reflect)"
+                : "Step 3 of 3 · writing day-by-day tasks and yield projections · result appears automatically"}
+            </p>
           </div>
         )}
       </div>
@@ -540,8 +561,9 @@ function ArizePanel({ arize, traceId, modelServed, evalScore, evalDetails, evalJ
 
   const arizeSpaceId = arizeStatus?.arizeOrgId     ?? arizeStatus?.spaceIdHint ?? process.env.NEXT_PUBLIC_ARIZE_SPACE_ID    ?? "";
   const arizeProject = arizeStatus?.projectName ?? process.env.NEXT_PUBLIC_ARIZE_PROJECT_NAME ?? "agriguardian-ai";
-  const arizeBase    = arizeSpaceId ? `https://app.arize.com/organizations/${arizeSpaceId}` : "https://app.arize.com";
-  const arizeUrl     = `${arizeBase}/projects/${arizeProject}/traces`;
+  // Always link to Arize home — deep project/trace links require an authenticated
+  // session and the URL format differs per workspace, causing 404 errors.
+  const arizeUrl     = "https://app.arize.com";
   const isConnected  = arizeStatus?.exporterEnabled ?? false;
 
   function copyTrace() {
@@ -616,10 +638,7 @@ function ArizePanel({ arize, traceId, modelServed, evalScore, evalDetails, evalJ
           )}
           <span className="text-[10px] px-1.5 py-0.5 rounded bg-violet-400/15 text-violet-300 font-semibold uppercase tracking-wider">MCP</span>
           <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-400/15 text-blue-300 font-semibold uppercase tracking-wider">OTLP</span>
-          <a href={arizeUrl} target="_blank" rel="noreferrer"
-             className="ml-auto text-[11px] px-2.5 py-1 rounded-lg border border-violet-400/40 text-violet-200 hover:bg-violet-400/10 flex items-center gap-1 shrink-0">
-            Open Arize →
-          </a>
+          <span className="ml-auto" />
         </div>
 
         <div className="p-4 space-y-4">
@@ -699,6 +718,15 @@ function ArizePanel({ arize, traceId, modelServed, evalScore, evalDetails, evalJ
             )}
           </div>
 
+          {/* ② Arize Improvement Insights — shown once eval details are available */}
+          {(evalDetails || (evalScore != null && evalScore < 0.75)) && (
+            <ArizeInsights
+              evalDetails={evalDetails}
+              evalScore={evalScore}
+              evalJudge={evalJudge}
+            />
+          )}
+
           {/* ③ Trace metadata */}
           <div>
             <div className="text-[10px] uppercase tracking-[0.15em] text-slate-500 font-semibold mb-2">③ Trace details</div>
@@ -737,11 +765,50 @@ function ArizePanel({ arize, traceId, modelServed, evalScore, evalDetails, evalJ
           <div>
             <div className="text-[10px] uppercase tracking-[0.15em] text-slate-500 font-semibold mb-2">④ Find this trace in Arize AX</div>
             <div className="rounded-lg border border-violet-400/15 bg-violet-400/[0.03] px-3 py-2.5 space-y-1.5 text-[11px] text-slate-400">
-              <div className="flex gap-2"><span className="text-violet-300 shrink-0 font-bold">①</span><span>Go to <span className="font-mono text-slate-200">app.arize.com</span> and sign in</span></div>
-              <div className="flex gap-2"><span className="text-violet-300 shrink-0 font-bold">②</span><span>Open project <span className="font-mono text-emerald-300">{arizeProject}</span></span></div>
-              <div className="flex gap-2"><span className="text-violet-300 shrink-0 font-bold">③</span><span>Click <span className="text-slate-200 font-medium">Traces</span> — all {spanCount} spans from this run are here</span></div>
-              <div className="flex gap-2"><span className="text-violet-300 shrink-0 font-bold">④</span><span>Expand any span to see tool inputs/outputs, eval scores, and latency</span></div>
+              {tid ? (
+                <>
+                  <div className="flex gap-2 items-start">
+                    <span className="text-violet-300 shrink-0 font-bold">①</span>
+                    <div>
+                      <span>Click </span>
+                      <span className="text-emerald-300 font-semibold">&quot;Open Arize →&quot;</span>
+                      <span> above, sign in, then navigate: </span>
+                      <span className="text-slate-200">Projects → </span>
+                      <span className="font-mono text-emerald-300">{arizeProject}</span>
+                      <span className="text-slate-200"> → Traces</span>
+                    </div>
+                  </div>
+                  <div className="flex gap-2 items-start">
+                    <span className="text-violet-300 shrink-0 font-bold">②</span>
+                    <div>
+                      Search for this trace ID:
+                      <div className="flex items-center gap-2 mt-1">
+                        <code className="text-[10px] text-violet-300 font-mono bg-violet-400/10 px-2 py-0.5 rounded border border-violet-400/15 select-all">{tid}</code>
+                        <button type="button" onClick={copyTrace}
+                          className="shrink-0 text-[9px] px-1.5 py-0.5 rounded border border-violet-400/20 text-violet-300 hover:bg-violet-400/10 transition">
+                          {copied ? "✓ Copied" : "Copy"}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex gap-2"><span className="text-violet-300 shrink-0 font-bold">③</span><span>Click the trace row to see all {spanCount} spans, tool I/O, and eval scores</span></div>
+                </>
+              ) : (
+                <>
+                  <div className="flex gap-2"><span className="text-violet-300 shrink-0 font-bold">①</span><span>Click <span className="text-emerald-300 font-semibold">&quot;Open Arize →&quot;</span> below and sign in to <span className="font-mono text-slate-200">app.arize.com</span></span></div>
+                  <div className="flex gap-2"><span className="text-violet-300 shrink-0 font-bold">②</span><span>Navigate to <span className="text-slate-100">Projects</span> → select <span className="font-mono text-emerald-300">{arizeProject}</span></span></div>
+                  <div className="flex gap-2"><span className="text-violet-300 shrink-0 font-bold">③</span><span>Click <span className="text-slate-200 font-medium">Traces</span> — all {spanCount} spans from this run will appear after the plan completes</span></div>
+                  <div className="flex gap-2"><span className="text-violet-300 shrink-0 font-bold">④</span><span>Expand any span to see tool inputs/outputs, eval scores, and latency</span></div>
+                </>
+              )}
             </div>
+            <a href={arizeUrl} target="_blank" rel="noreferrer"
+               className="mt-2 inline-flex items-center gap-1.5 text-[11px] px-3 py-1.5 rounded-lg border border-violet-400/40 text-violet-200 hover:bg-violet-400/10 transition font-medium">
+              Open Arize →
+            </a>
+            <p className="mt-1 text-[10px] text-slate-600">
+              Sign in at app.arize.com → Projects → <span className="font-mono">{arizeProject}</span> → Traces
+            </p>
           </div>
 
           {arize?.note && (
@@ -1040,3 +1107,5 @@ function ResultCard({
     </div>
   );
 }
+
+
