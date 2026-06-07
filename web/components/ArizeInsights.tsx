@@ -41,17 +41,8 @@ export function ArizeInsights({
 
   const hasLowScores = dims.some(d => !d.pass);
   const overallScore = evalScore ?? evalDetails?.aggregate ?? null;
-
-  if (!hasLowScores && overallScore != null && overallScore >= 0.75) {
-    return (
-      <div className="rounded-lg border border-emerald-500/30 bg-emerald-950/30 px-4 py-3">
-        <div className="flex items-center gap-2">
-          <span className="text-lg">✓</span>
-          <span className="text-sm font-medium text-emerald-100">Plan quality looks good</span>
-        </div>
-      </div>
-    );
-  }
+  const showSuccessBanner = !hasLowScores && overallScore != null && overallScore >= 0.75;
+  const summary = buildSummary(dims, overallScore);
 
   return (
     <div className="rounded-lg border border-slate-700/50 bg-slate-900/30 p-4 space-y-4">
@@ -61,6 +52,11 @@ export function ArizeInsights({
           💡 Plan coaching for your next run
         </div>
         <h4 className="text-sm font-semibold text-slate-100">Friendly quality check powered by Arize</h4>
+        {summary && (
+          <p className="mt-2 text-[12px] leading-relaxed text-slate-400">
+            {summary}
+          </p>
+        )}
       </div>
 
       {/* Score dimensions with actionable insights */}
@@ -79,6 +75,9 @@ export function ArizeInsights({
                     <div>
                       <div className="text-[12px] font-semibold text-slate-100">{dim.label}</div>
                       <div className="text-[10px] text-slate-500">{dim.hint}</div>
+                      <div className="mt-1 text-[11px] leading-relaxed text-slate-400 max-w-2xl">
+                        {getDimExplanation(dim.key, dim.score)}
+                      </div>
                     </div>
                   </div>
                   <div className={`text-[12px] font-bold tabular-nums ${textColor}`}>{pct}%</div>
@@ -118,16 +117,73 @@ export function ArizeInsights({
           <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Quick wins for your next plan:</p>
           <div className="flex flex-wrap gap-2">
             <span className="text-[11px] px-2.5 py-1.5 rounded-lg bg-blue-400/10 border border-blue-400/20 text-blue-300">
-              ✓ Click "Force Live" to fetch fresh data
+              ✓ Click "Force Live" to fetch the latest weather, market, and soil data
             </span>
             <span className="text-[11px] px-2.5 py-1.5 rounded-lg bg-cyan-400/10 border border-cyan-400/20 text-cyan-300">
-              ✓ Complete farm soil type & GPS
+              ✓ Complete farm soil type and GPS coordinates so crop choice can be matched properly
             </span>
+            <span className="text-[11px] px-2.5 py-1.5 rounded-lg bg-emerald-400/10 border border-emerald-400/20 text-emerald-300">
+              ✓ Re-run the plan after edits so the new recommendation gets rescored
+            </span>
+          </div>
+        </div>
+      )}
+
+      {showSuccessBanner && (
+        <div className="rounded-lg border border-emerald-500/30 bg-emerald-950/30 px-4 py-3">
+          <div className="flex items-center gap-2">
+            <span className="text-lg">✓</span>
+            <span className="text-sm font-medium text-emerald-100">Plan quality looks good</span>
           </div>
         </div>
       )}
     </div>
   );
+}
+
+function buildSummary(dims: Array<{ label: string; score: number; pass: boolean }>, overallScore: number | null): string | null {
+  if (!dims.length && overallScore == null) return null;
+
+  const topIssue = dims
+    .filter(d => !d.pass)
+    .sort((a, b) => a.score - b.score)[0];
+
+  if (topIssue) {
+    return `${topIssue.label} is the weakest part of the latest plan. Improving farm details and live data will usually lift this score the fastest.`;
+  }
+
+  if (overallScore != null) {
+    return overallScore >= 0.85
+      ? "The latest plan looks strong overall. Keep the same farm details and live data inputs to maintain this level."
+      : "The latest plan is in good shape, but there is still room to make the recommendation more precise with complete farm details.";
+  }
+
+  return null;
+}
+
+function getDimExplanation(key: string, score: number): string {
+  if (score >= 0.75) {
+    switch (key) {
+      case "relevance": return "This looks aligned with your farm profile, so the recommendation is likely specific rather than generic.";
+      case "groundedness": return "The estimates appear to be backed by live tool data, which makes the plan more trustworthy.";
+      case "agronomicCorrectness": return "The crop choice is a decent fit for the current soil and season inputs you provided.";
+      case "hallucinationRisk": return "The response stays close to the available data and avoids unsupported claims.";
+      default: return "This dimension is performing well.";
+    }
+  }
+
+  switch (key) {
+    case "relevance":
+      return "Add or correct farm location, soil type, and season details so the plan matches your exact field instead of a broad generic recommendation.";
+    case "groundedness":
+      return "Use fresh live inputs before generating a new plan so the numbers reflect current weather, soil, and market conditions.";
+    case "agronomicCorrectness":
+      return "Tighten crop choice by checking soil compatibility, irrigation needs, and any preferred crop override you want the agent to consider.";
+    case "hallucinationRisk":
+      return "Fill missing farm inputs and refresh live data so the response stays tied to verified tool outputs.";
+    default:
+      return "This area needs more context from your farm profile and live data.";
+  }
 }
 
 function getDimLabel(key: string): string {
