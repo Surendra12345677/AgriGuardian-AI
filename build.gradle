@@ -22,7 +22,7 @@ ext {
 	// opentelemetry-context / -common transitive deps that Spring Boot 4
 	// pulls in. Mismatched versions caused OtlpHttpSpanExporterBuilder
 	// to crash on a missing HttpExporterBuilder constructor at startup.
-	otelVersion = '1.55.0'
+	otelVersion = '1.63.0'
 	resilience4jVersion = '2.2.0'
 }
 
